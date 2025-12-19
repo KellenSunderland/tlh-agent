@@ -88,12 +88,12 @@ class MainWindow(ttk.Frame):
         if self._current_screen and self._current_screen in self._screens:
             self._screens[self._current_screen].pack_forget()
 
-        # Show new screen
+        # Show new screen with comfortable padding
         if screen_name in self._screens:
             self._screens[screen_name].pack(
                 fill=tk.BOTH,
                 expand=True,
-                padx=Theme.spacing.LG,
+                padx=Theme.spacing.XL,
                 pady=Theme.spacing.LG,
             )
             self._current_screen = screen_name
