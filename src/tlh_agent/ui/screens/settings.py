@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from tlh_agent.ui.base import BaseScreen
+from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.page_header import PageHeader
 from tlh_agent.ui.theme import Colors, Fonts, Spacing
 
@@ -52,26 +53,10 @@ class SettingsScreen(BaseScreen):
         Returns:
             The content frame for the section.
         """
-        section = tk.Frame(self.settings_frame, bg=Colors.BG_SECONDARY)
-        section.pack(fill=tk.X, pady=(0, Spacing.MD))
+        section_card = Card(self.settings_frame, title=title)
+        section_card.pack(fill=tk.X, pady=(0, Spacing.MD))
 
-        header = tk.Frame(section, bg=Colors.BG_TERTIARY)
-        header.pack(fill=tk.X)
-
-        tk.Label(
-            header,
-            text=title,
-            font=Fonts.BODY_BOLD,
-            fg=Colors.TEXT_PRIMARY,
-            bg=Colors.BG_TERTIARY,
-            padx=Spacing.MD,
-            pady=Spacing.SM,
-        ).pack(anchor=tk.W)
-
-        content = tk.Frame(section, bg=Colors.BG_SECONDARY)
-        content.pack(fill=tk.X, padx=Spacing.MD, pady=Spacing.SM)
-
-        return content
+        return section_card.content
 
     def _build_field(
         self,

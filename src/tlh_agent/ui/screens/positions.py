@@ -6,6 +6,7 @@ from typing import Any
 
 from tlh_agent.data.mock_data import MockDataFactory, Position
 from tlh_agent.ui.base import BaseScreen
+from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.data_table import ColumnDef, DataTable
 from tlh_agent.ui.components.page_header import PageHeader
 from tlh_agent.ui.theme import Colors, Fonts, Spacing
@@ -21,10 +22,11 @@ class PositionsScreen(BaseScreen):
         header.pack(fill=tk.X, pady=(0, Spacing.LG))
         header.add_action_button("Export CSV", self._on_export)
 
-        # Summary bar
-        self.summary_frame = tk.Frame(self, bg=Colors.BG_SECONDARY)
-        self.summary_frame.pack(fill=tk.X, pady=(0, Spacing.MD))
+        # Summary card
+        summary_card = Card(self, title="Portfolio Summary")
+        summary_card.pack(fill=tk.X, pady=(0, Spacing.MD))
 
+        self.summary_frame = summary_card.content
         self.summary_labels: dict[str, tk.Label] = {}
         for key, label in [
             ("total_value", "Total Value"),
@@ -33,7 +35,7 @@ class PositionsScreen(BaseScreen):
             ("positions", "Positions"),
         ]:
             frame = tk.Frame(self.summary_frame, bg=Colors.BG_SECONDARY)
-            frame.pack(side=tk.LEFT, padx=Spacing.LG, pady=Spacing.SM)
+            frame.pack(side=tk.LEFT, padx=(0, Spacing.XL))
 
             tk.Label(
                 frame,
@@ -53,7 +55,10 @@ class PositionsScreen(BaseScreen):
             value_label.pack(anchor=tk.W)
             self.summary_labels[key] = value_label
 
-        # Positions table
+        # Positions table in card
+        table_card = Card(self, title="Holdings")
+        table_card.pack(fill=tk.BOTH, expand=True, pady=(0, Spacing.MD))
+
         columns = [
             ColumnDef("ticker", "Ticker", width=80),
             ColumnDef("name", "Name", width=200),
@@ -67,16 +72,18 @@ class PositionsScreen(BaseScreen):
         ]
 
         self.table = DataTable(
-            self,
+            table_card.content,
             columns=columns,
             on_select=self._on_position_select,
             on_double_click=self._on_position_double_click,
         )
-        self.table.pack(fill=tk.BOTH, expand=True, pady=(0, Spacing.MD))
+        self.table.pack(fill=tk.BOTH, expand=True)
 
         # Lot details panel (below table)
-        self.details_frame = tk.Frame(self, bg=Colors.BG_SECONDARY)
-        self.details_frame.pack(fill=tk.X, pady=(0, 0))
+        details_card = Card(self, title="Lot Details")
+        details_card.pack(fill=tk.X)
+
+        self.details_frame = details_card.content
 
         self.details_label = tk.Label(
             self.details_frame,
@@ -86,7 +93,7 @@ class PositionsScreen(BaseScreen):
             bg=Colors.BG_SECONDARY,
             anchor=tk.W,
         )
-        self.details_label.pack(fill=tk.X, padx=Spacing.MD, pady=Spacing.MD)
+        self.details_label.pack(fill=tk.X)
 
     def refresh(self) -> None:
         """Refresh positions data."""

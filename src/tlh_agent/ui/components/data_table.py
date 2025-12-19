@@ -101,6 +101,11 @@ class DataTable(ttk.Frame):
         # Bind events
         self._tree.bind("<<TreeviewSelect>>", self._handle_select)
         self._tree.bind("<Double-1>", self._handle_double_click)
+        self._tree.bind("<Motion>", self._handle_motion)
+        self._tree.bind("<Leave>", self._handle_leave)
+
+        # Track hovered row
+        self._hovered_item: str | None = None
 
         # Custom row styling
         self._tree.tag_configure("gain", foreground=Colors.SUCCESS_TEXT)
@@ -108,6 +113,7 @@ class DataTable(ttk.Frame):
         self._tree.tag_configure("muted", foreground=Colors.TEXT_MUTED)
         self._tree.tag_configure("accent", foreground=Colors.ACCENT)
         self._tree.tag_configure("striped", background=Colors.BG_TERTIARY)
+        self._tree.tag_configure("hover", background=Colors.BG_SECONDARY)
 
     def set_data(self, data: list[dict[str, Any]]) -> None:
         """Set the table data.
@@ -200,6 +206,36 @@ class DataTable(ttk.Frame):
             index = self._tree.index(item)
             if 0 <= index < len(self._data):
                 self._on_double_click(self._data[index])
+
+    def _handle_motion(self, event: tk.Event) -> None:  # type: ignore[type-arg]
+        """Handle mouse motion for hover effect."""
+        item = self._tree.identify_row(event.y)
+
+        if item != self._hovered_item:
+            # Remove hover from previous item
+            if self._hovered_item:
+                tags = list(self._tree.item(self._hovered_item, "tags"))
+                if "hover" in tags:
+                    tags.remove("hover")
+                    self._tree.item(self._hovered_item, tags=tags)
+
+            # Add hover to new item
+            if item:
+                tags = list(self._tree.item(item, "tags"))
+                if "hover" not in tags:
+                    tags.append("hover")
+                    self._tree.item(item, tags=tags)
+
+            self._hovered_item = item
+
+    def _handle_leave(self, event: tk.Event) -> None:  # type: ignore[type-arg]
+        """Handle mouse leaving the table."""
+        if self._hovered_item:
+            tags = list(self._tree.item(self._hovered_item, "tags"))
+            if "hover" in tags:
+                tags.remove("hover")
+                self._tree.item(self._hovered_item, tags=tags)
+            self._hovered_item = None
 
     def get_selected(self) -> dict[str, Any] | None:
         """Get the currently selected row data.

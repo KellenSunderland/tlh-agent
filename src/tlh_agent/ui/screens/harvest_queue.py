@@ -6,6 +6,7 @@ from typing import Any
 
 from tlh_agent.data.mock_data import HarvestOpportunity, MockDataFactory
 from tlh_agent.ui.base import BaseScreen
+from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.data_table import ColumnDef, DataTable
 from tlh_agent.ui.components.page_header import PageHeader
 from tlh_agent.ui.theme import Colors, Fonts, Spacing
@@ -32,10 +33,11 @@ class HarvestQueueScreen(BaseScreen):
         )
         self.total_savings_label.pack(side=tk.RIGHT)
 
-        # Summary bar
-        summary_frame = tk.Frame(self, bg=Colors.BG_SECONDARY)
-        summary_frame.pack(fill=tk.X, pady=(0, Spacing.MD))
+        # Summary card
+        summary_card = Card(self, title="Queue Summary")
+        summary_card.pack(fill=tk.X, pady=(0, Spacing.MD))
 
+        summary_content = summary_card.content
         self.summary_labels: dict[str, tk.Label] = {}
         for key, label in [
             ("pending", "Pending"),
@@ -43,8 +45,8 @@ class HarvestQueueScreen(BaseScreen):
             ("total_loss", "Total Loss"),
             ("tax_benefit", "Tax Benefit"),
         ]:
-            frame = tk.Frame(summary_frame, bg=Colors.BG_SECONDARY)
-            frame.pack(side=tk.LEFT, padx=Spacing.LG, pady=Spacing.SM)
+            frame = tk.Frame(summary_content, bg=Colors.BG_SECONDARY)
+            frame.pack(side=tk.LEFT, padx=(0, Spacing.XL))
 
             tk.Label(
                 frame,
@@ -64,7 +66,10 @@ class HarvestQueueScreen(BaseScreen):
             value_label.pack(anchor=tk.W)
             self.summary_labels[key] = value_label
 
-        # Harvest opportunities table
+        # Harvest opportunities table in card
+        table_card = Card(self, title="Harvest Opportunities")
+        table_card.pack(fill=tk.BOTH, expand=True, pady=(0, Spacing.MD))
+
         columns = [
             ColumnDef("status", "Status", width=80),
             ColumnDef("ticker", "Ticker", width=80),
@@ -77,11 +82,11 @@ class HarvestQueueScreen(BaseScreen):
         ]
 
         self.table = DataTable(
-            self,
+            table_card.content,
             columns=columns,
             on_select=self._on_select,
         )
-        self.table.pack(fill=tk.BOTH, expand=True, pady=(0, Spacing.MD))
+        self.table.pack(fill=tk.BOTH, expand=True)
 
         # Action buttons row
         action_frame = ttk.Frame(self, style="TFrame")
@@ -169,9 +174,11 @@ class HarvestQueueScreen(BaseScreen):
             command=self._on_execute,
         ).pack(side=tk.RIGHT)
 
-        # Details panel
-        self.details_frame = tk.Frame(self, bg=Colors.BG_SECONDARY)
-        self.details_frame.pack(fill=tk.X)
+        # Details panel in card
+        details_card = Card(self, title="Details")
+        details_card.pack(fill=tk.X)
+
+        self.details_frame = details_card.content
 
         self.details_label = tk.Label(
             self.details_frame,
@@ -181,7 +188,7 @@ class HarvestQueueScreen(BaseScreen):
             bg=Colors.BG_SECONDARY,
             anchor=tk.W,
         )
-        self.details_label.pack(fill=tk.X, padx=Spacing.MD, pady=Spacing.MD)
+        self.details_label.pack(fill=tk.X)
 
     def refresh(self) -> None:
         """Refresh harvest queue data."""

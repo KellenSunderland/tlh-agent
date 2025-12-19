@@ -46,7 +46,7 @@ class Colors:
     BG_PRIMARY: ClassVar[str] = "#1a242f"  # Deep navy (main background)
     BG_SECONDARY: ClassVar[str] = "#232f3e"  # AWS navy (cards, sidebar)
     BG_TERTIARY: ClassVar[str] = "#2a3f54"  # Lighter navy (hover states)
-    BG_INPUT: ClassVar[str] = "#1a242f"  # Input field background
+    BG_INPUT: ClassVar[str] = "#2a3f54"  # Input field background (slightly lighter)
 
     # Text
     TEXT_PRIMARY: ClassVar[str] = "#ffffff"  # White
@@ -189,11 +189,9 @@ class Theme:
         """Configure ttk styles for the application."""
         style = ttk.Style(root)
 
-        # Try to use aqua theme as base on macOS, fall back to clam
-        try:
-            style.theme_use("aqua")
-        except Exception:
-            style.theme_use("clam")
+        # Use clam theme for better dark theme customization
+        # (aqua theme on macOS overrides many custom styles)
+        style.theme_use("clam")
 
         # Configure base styles
         style.configure(

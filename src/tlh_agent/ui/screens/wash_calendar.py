@@ -7,6 +7,7 @@ from tkinter import ttk
 
 from tlh_agent.data.mock_data import MockDataFactory, WashSaleRestriction
 from tlh_agent.ui.base import BaseScreen
+from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.page_header import PageHeader
 from tlh_agent.ui.theme import Colors, Fonts, Spacing
 
@@ -24,13 +25,15 @@ class WashCalendarScreen(BaseScreen):
         content_frame = ttk.Frame(self, style="TFrame")
         content_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Left: Calendar
-        calendar_frame = tk.Frame(content_frame, bg=Colors.BG_SECONDARY)
-        calendar_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, Spacing.MD))
+        # Left: Calendar in card
+        calendar_card = Card(content_frame, title="Calendar")
+        calendar_card.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, Spacing.MD))
+
+        calendar_content = calendar_card.content
 
         # Calendar navigation
-        nav_frame = tk.Frame(calendar_frame, bg=Colors.BG_SECONDARY)
-        nav_frame.pack(fill=tk.X, padx=Spacing.MD, pady=Spacing.SM)
+        nav_frame = tk.Frame(calendar_content, bg=Colors.BG_SECONDARY)
+        nav_frame.pack(fill=tk.X, pady=(0, Spacing.SM))
 
         self.prev_btn = tk.Button(
             nav_frame,
@@ -68,12 +71,12 @@ class WashCalendarScreen(BaseScreen):
         self.next_btn.pack(side=tk.RIGHT)
 
         # Calendar grid
-        self.calendar_grid = tk.Frame(calendar_frame, bg=Colors.BG_SECONDARY)
-        self.calendar_grid.pack(fill=tk.BOTH, expand=True, padx=Spacing.MD, pady=Spacing.SM)
+        self.calendar_grid = tk.Frame(calendar_content, bg=Colors.BG_SECONDARY)
+        self.calendar_grid.pack(fill=tk.BOTH, expand=True, pady=Spacing.SM)
 
         # Legend
-        legend_frame = tk.Frame(calendar_frame, bg=Colors.BG_SECONDARY)
-        legend_frame.pack(fill=tk.X, padx=Spacing.MD, pady=Spacing.SM)
+        legend_frame = tk.Frame(calendar_content, bg=Colors.BG_SECONDARY)
+        legend_frame.pack(fill=tk.X, pady=Spacing.SM)
 
         for color, label in [
             (Colors.WARNING, "Restriction Active"),
@@ -92,22 +95,12 @@ class WashCalendarScreen(BaseScreen):
                 bg=Colors.BG_SECONDARY,
             ).pack(side=tk.LEFT)
 
-        # Right: Restrictions list
-        list_frame = tk.Frame(content_frame, bg=Colors.BG_SECONDARY, width=280)
-        list_frame.pack(side=tk.RIGHT, fill=tk.Y)
-        list_frame.pack_propagate(False)
+        # Right: Restrictions list in card
+        restrictions_card = Card(content_frame, title="Active Restrictions")
+        restrictions_card.pack(side=tk.RIGHT, fill=tk.Y)
+        restrictions_card.configure(width=280)
 
-        list_header = tk.Label(
-            list_frame,
-            text="Active Restrictions",
-            font=Fonts.SUBHEADING,
-            fg=Colors.TEXT_PRIMARY,
-            bg=Colors.BG_SECONDARY,
-        )
-        list_header.pack(fill=tk.X, padx=Spacing.MD, pady=Spacing.SM)
-
-        self.restrictions_list = tk.Frame(list_frame, bg=Colors.BG_SECONDARY)
-        self.restrictions_list.pack(fill=tk.BOTH, expand=True, padx=Spacing.MD)
+        self.restrictions_list = restrictions_card.content
 
         # Initialize current month
         today = date.today()

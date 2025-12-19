@@ -2,10 +2,10 @@
 
 import tkinter as tk
 from decimal import Decimal
-from tkinter import ttk
 
 from tlh_agent.data.mock_data import MockDataFactory
 from tlh_agent.ui.base import BaseScreen
+from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.page_header import PageHeader
 from tlh_agent.ui.theme import Colors, Fonts, Spacing
 
@@ -23,33 +23,23 @@ class LossLedgerScreen(BaseScreen):
         header.add_action_button("Export Tax Report", self._on_export)
 
         # Carryforward summary card
-        summary_card = tk.Frame(self, bg=Colors.BG_SECONDARY)
-        summary_card.pack(fill=tk.X, pady=(0, Spacing.LG))
+        summary_card = Card(self, title="Available Carryforward")
+        summary_card.pack(fill=tk.X, pady=(0, Spacing.MD))
 
-        summary_inner = tk.Frame(summary_card, bg=Colors.BG_SECONDARY)
-        summary_inner.pack(fill=tk.X, padx=Spacing.LG, pady=Spacing.MD)
-
-        # Title
-        tk.Label(
-            summary_inner,
-            text="Available Carryforward",
-            font=Fonts.SUBHEADING,
-            fg=Colors.TEXT_PRIMARY,
-            bg=Colors.BG_SECONDARY,
-        ).pack(anchor=tk.W)
+        summary_content = summary_card.content
 
         # Total carryforward
         self.total_carryforward_label = tk.Label(
-            summary_inner,
+            summary_content,
             text="$0.00",
             font=("Inter", 32, "bold"),
             fg=Colors.ACCENT,
             bg=Colors.BG_SECONDARY,
         )
-        self.total_carryforward_label.pack(anchor=tk.W, pady=(Spacing.SM, Spacing.XS))
+        self.total_carryforward_label.pack(anchor=tk.W, pady=(0, Spacing.XS))
 
         # Breakdown
-        breakdown_frame = tk.Frame(summary_inner, bg=Colors.BG_SECONDARY)
+        breakdown_frame = tk.Frame(summary_content, bg=Colors.BG_SECONDARY)
         breakdown_frame.pack(anchor=tk.W)
 
         self.st_carryforward_label = tk.Label(
@@ -70,13 +60,11 @@ class LossLedgerScreen(BaseScreen):
         )
         self.lt_carryforward_label.pack(side=tk.LEFT)
 
-        # Year-by-year breakdown header
-        breakdown_header = ttk.Label(self, text="Year-by-Year Breakdown", style="Subheading.TLabel")
-        breakdown_header.pack(anchor=tk.W, pady=(Spacing.MD, Spacing.SM))
+        # Year-by-year breakdown card
+        year_card = Card(self, title="Year-by-Year Breakdown")
+        year_card.pack(fill=tk.BOTH, expand=True)
 
-        # Year table frame
-        self.year_table_frame = tk.Frame(self, bg=Colors.BG_SECONDARY)
-        self.year_table_frame.pack(fill=tk.BOTH, expand=True)
+        self.year_table_frame = year_card.content
 
     def refresh(self) -> None:
         """Refresh loss ledger data."""
