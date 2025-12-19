@@ -18,7 +18,7 @@ class DashboardScreen(BaseScreen):
         header = ttk.Label(self, text="Dashboard", style="Heading.TLabel")
         header.pack(anchor=tk.W, pady=(0, Spacing.LG))
 
-        # Summary cards row
+        # Summary cards row - use grid for equal width columns
         cards_frame = tk.Frame(self, bg=Colors.BG_PRIMARY)
         cards_frame.pack(fill=tk.X, pady=(0, Spacing.LG))
 
@@ -31,9 +31,10 @@ class DashboardScreen(BaseScreen):
             ("pending", "Pending Harvests", "0", None),
         ]
 
-        for card_id, label, value, trend in card_configs:
+        for i, (card_id, label, value, trend) in enumerate(card_configs):
             card = MetricCard(cards_frame, label=label, value=value, trend=trend)
-            card.pack(side=tk.LEFT, padx=(0, Spacing.MD), fill=tk.Y)
+            card.grid(row=0, column=i, sticky="nsew", padx=(0 if i == 0 else Spacing.SM, 0))
+            cards_frame.grid_columnconfigure(i, weight=1, uniform="cards")
             self.cards[card_id] = card
 
         # Top Harvest Opportunities section
@@ -110,24 +111,24 @@ class DashboardScreen(BaseScreen):
             label.pack(pady=Spacing.MD)
             return
 
-        # Header row
+        # Header row - use grid for proper column alignment
         header_frame = tk.Frame(self.opps_content, bg=Colors.BG_SECONDARY)
         header_frame.pack(fill=tk.X, pady=(0, Spacing.SM))
 
         headers = ["Ticker", "Loss", "Tax Benefit", "Action"]
-        widths = [100, 120, 120, 100]
+        weights = [1, 1, 1, 1]
 
-        for hdr, width in zip(headers, widths, strict=False):
+        for i, hdr in enumerate(headers):
             lbl = tk.Label(
                 header_frame,
                 text=hdr,
                 font=Fonts.CAPTION,
                 fg=Colors.TEXT_MUTED,
                 bg=Colors.BG_SECONDARY,
-                width=width // 10,
                 anchor=tk.W,
             )
-            lbl.pack(side=tk.LEFT, padx=(0, Spacing.SM))
+            lbl.grid(row=0, column=i, sticky="w", padx=(0, Spacing.MD))
+            header_frame.grid_columnconfigure(i, weight=weights[i])
 
         # Data rows
         for opp in opportunities:
@@ -141,9 +142,8 @@ class DashboardScreen(BaseScreen):
                 font=Fonts.BODY_BOLD,
                 fg=Colors.TEXT_PRIMARY,
                 bg=Colors.BG_SECONDARY,
-                width=10,
                 anchor=tk.W,
-            ).pack(side=tk.LEFT, padx=(0, Spacing.SM))
+            ).grid(row=0, column=0, sticky="w", padx=(0, Spacing.MD))
 
             # Loss
             tk.Label(
@@ -152,9 +152,8 @@ class DashboardScreen(BaseScreen):
                 font=Fonts.BODY,
                 fg=Colors.DANGER_TEXT,
                 bg=Colors.BG_SECONDARY,
-                width=12,
                 anchor=tk.W,
-            ).pack(side=tk.LEFT, padx=(0, Spacing.SM))
+            ).grid(row=0, column=1, sticky="w", padx=(0, Spacing.MD))
 
             # Tax Benefit
             tk.Label(
@@ -163,9 +162,8 @@ class DashboardScreen(BaseScreen):
                 font=Fonts.BODY,
                 fg=Colors.SUCCESS_TEXT,
                 bg=Colors.BG_SECONDARY,
-                width=12,
                 anchor=tk.W,
-            ).pack(side=tk.LEFT, padx=(0, Spacing.SM))
+            ).grid(row=0, column=2, sticky="w", padx=(0, Spacing.MD))
 
             # Action button
             btn = tk.Button(
@@ -181,7 +179,11 @@ class DashboardScreen(BaseScreen):
                 padx=Spacing.SM,
                 command=lambda t=opp.ticker: self._on_harvest(t),
             )
-            btn.pack(side=tk.LEFT)
+            btn.grid(row=0, column=3, sticky="w")
+
+            # Configure row columns to match header
+            for i, w in enumerate(weights):
+                row_frame.grid_columnconfigure(i, weight=w)
 
     def _build_alerts_list(self, restrictions: list) -> None:
         """Build the wash sale alerts list.

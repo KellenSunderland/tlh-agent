@@ -6,6 +6,7 @@ from typing import Any
 
 from tlh_agent.data.mock_data import MockDataFactory, Trade
 from tlh_agent.ui.base import BaseScreen
+from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.data_table import ColumnDef, DataTable
 from tlh_agent.ui.theme import Colors, Fonts, Spacing
 
@@ -23,24 +24,35 @@ class TradeHistoryScreen(BaseScreen):
         header.pack(side=tk.LEFT)
 
         # Export button
-        export_btn = ttk.Button(
+        export_btn = tk.Button(
             header_frame,
             text="Export CSV",
-            style="TButton",
+            font=Fonts.BODY,
+            fg=Colors.TEXT_PRIMARY,
+            bg=Colors.BG_TERTIARY,
+            activebackground=Colors.BORDER_LIGHT,
+            activeforeground=Colors.TEXT_PRIMARY,
+            relief=tk.FLAT,
+            cursor="hand2",
+            padx=Spacing.MD,
+            pady=Spacing.XS,
             command=self._on_export,
         )
         export_btn.pack(side=tk.RIGHT)
 
-        # Filter bar
-        filter_frame = tk.Frame(self, bg=Colors.BG_SECONDARY)
-        filter_frame.pack(fill=tk.X, pady=(0, Spacing.MD))
+        # Filters card
+        filters_card = Card(self, title="Filters")
+        filters_card.pack(fill=tk.X, pady=(0, Spacing.MD))
 
-        filter_inner = tk.Frame(filter_frame, bg=Colors.BG_SECONDARY)
-        filter_inner.pack(fill=tk.X, padx=Spacing.MD, pady=Spacing.SM)
+        filter_content = filters_card.content
+
+        # Filter row
+        filter_row = tk.Frame(filter_content, bg=Colors.BG_SECONDARY)
+        filter_row.pack(fill=tk.X, pady=(0, Spacing.SM))
 
         # Date range filter
         tk.Label(
-            filter_inner,
+            filter_row,
             text="Date Range:",
             font=Fonts.BODY,
             fg=Colors.TEXT_SECONDARY,
@@ -57,7 +69,7 @@ class TradeHistoryScreen(BaseScreen):
             "Last Year",
         ]
         date_dropdown = ttk.Combobox(
-            filter_inner,
+            filter_row,
             textvariable=self.date_range_var,
             values=date_options,
             state="readonly",
@@ -68,7 +80,7 @@ class TradeHistoryScreen(BaseScreen):
 
         # Type filter
         tk.Label(
-            filter_inner,
+            filter_row,
             text="Type:",
             font=Fonts.BODY,
             fg=Colors.TEXT_SECONDARY,
@@ -78,7 +90,7 @@ class TradeHistoryScreen(BaseScreen):
         self.type_var = tk.StringVar(value="All")
         type_options = ["All", "Buy", "Sell", "Harvests Only"]
         type_dropdown = ttk.Combobox(
-            filter_inner,
+            filter_row,
             textvariable=self.type_var,
             values=type_options,
             state="readonly",
@@ -89,7 +101,7 @@ class TradeHistoryScreen(BaseScreen):
 
         # Ticker search
         tk.Label(
-            filter_inner,
+            filter_row,
             text="Ticker:",
             font=Fonts.BODY,
             fg=Colors.TEXT_SECONDARY,
@@ -98,7 +110,7 @@ class TradeHistoryScreen(BaseScreen):
 
         self.ticker_var = tk.StringVar()
         ticker_entry = ttk.Entry(
-            filter_inner,
+            filter_row,
             textvariable=self.ticker_var,
             width=10,
         )
@@ -107,7 +119,7 @@ class TradeHistoryScreen(BaseScreen):
 
         # Clear filters button
         tk.Button(
-            filter_inner,
+            filter_row,
             text="Clear",
             font=Fonts.CAPTION,
             fg=Colors.TEXT_PRIMARY,
@@ -119,9 +131,9 @@ class TradeHistoryScreen(BaseScreen):
             command=self._clear_filters,
         ).pack(side=tk.LEFT)
 
-        # Summary stats
-        self.stats_frame = tk.Frame(filter_frame, bg=Colors.BG_SECONDARY)
-        self.stats_frame.pack(fill=tk.X, padx=Spacing.MD, pady=(0, Spacing.SM))
+        # Summary stats row
+        stats_row = tk.Frame(filter_content, bg=Colors.BG_SECONDARY)
+        stats_row.pack(fill=tk.X)
 
         self.stats_labels: dict[str, tk.Label] = {}
         for key, label in [
@@ -129,7 +141,7 @@ class TradeHistoryScreen(BaseScreen):
             ("total_sold", "Total Sold"),
             ("total_bought", "Total Bought"),
         ]:
-            stat_frame = tk.Frame(self.stats_frame, bg=Colors.BG_SECONDARY)
+            stat_frame = tk.Frame(stats_row, bg=Colors.BG_SECONDARY)
             stat_frame.pack(side=tk.LEFT, padx=(0, Spacing.XL))
 
             tk.Label(
@@ -150,7 +162,10 @@ class TradeHistoryScreen(BaseScreen):
             value_label.pack(side=tk.LEFT, padx=(Spacing.XS, 0))
             self.stats_labels[key] = value_label
 
-        # Trade history table
+        # Trade history table in a card
+        table_card = Card(self, title="Trade Log")
+        table_card.pack(fill=tk.BOTH, expand=True)
+
         columns = [
             ColumnDef("date", "Date", width=100),
             ColumnDef("type", "Type", width=60),
@@ -162,7 +177,7 @@ class TradeHistoryScreen(BaseScreen):
         ]
 
         self.table = DataTable(
-            self,
+            table_card.content,
             columns=columns,
             on_select=self._on_select,
         )
