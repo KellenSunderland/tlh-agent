@@ -26,7 +26,9 @@ class SummaryCard(ttk.Frame):
             trend: Optional trend indicator (e.g., "+5.2%").
             trend_positive: Whether the trend is positive (green) or negative (red).
         """
-        super().__init__(parent, style="Card.TFrame", width=Sizes.CARD_MIN_WIDTH)
+        super().__init__(
+            parent, style="Card.TFrame", width=Sizes.CARD_MIN_WIDTH, height=Sizes.CARD_HEIGHT
+        )
         self.pack_propagate(False)
 
         self._label = label
