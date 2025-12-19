@@ -1,11 +1,11 @@
 """Dashboard screen with portfolio summary and key metrics."""
 
 import tkinter as tk
-from tkinter import ttk
 
 from tlh_agent.data.mock_data import MockDataFactory
 from tlh_agent.ui.base import BaseScreen
 from tlh_agent.ui.components.card import Card, MetricCard
+from tlh_agent.ui.components.page_header import PageHeader
 from tlh_agent.ui.theme import Colors, Fonts, Spacing
 
 
@@ -15,8 +15,10 @@ class DashboardScreen(BaseScreen):
     def _setup_ui(self) -> None:
         """Set up the dashboard layout."""
         # Header
-        header = ttk.Label(self, text="Dashboard", style="Heading.TLabel")
-        header.pack(anchor=tk.W, pady=(0, Spacing.LG))
+        header = PageHeader(
+            self, title="Dashboard", subtitle="Portfolio overview and harvest opportunities"
+        )
+        header.pack(fill=tk.X, pady=(0, Spacing.LG))
 
         # Summary cards row - use grid for equal width columns
         cards_frame = tk.Frame(self, bg=Colors.BG_PRIMARY)

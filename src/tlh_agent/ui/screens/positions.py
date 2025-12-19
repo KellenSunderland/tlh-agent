@@ -2,12 +2,12 @@
 
 import tkinter as tk
 from decimal import Decimal
-from tkinter import ttk
 from typing import Any
 
 from tlh_agent.data.mock_data import MockDataFactory, Position
 from tlh_agent.ui.base import BaseScreen
 from tlh_agent.ui.components.data_table import ColumnDef, DataTable
+from tlh_agent.ui.components.page_header import PageHeader
 from tlh_agent.ui.theme import Colors, Fonts, Spacing
 
 
@@ -16,21 +16,10 @@ class PositionsScreen(BaseScreen):
 
     def _setup_ui(self) -> None:
         """Set up the positions screen layout."""
-        # Header row
-        header_frame = ttk.Frame(self, style="TFrame")
-        header_frame.pack(fill=tk.X, pady=(0, Spacing.LG))
-
-        header = ttk.Label(header_frame, text="Positions", style="Heading.TLabel")
-        header.pack(side=tk.LEFT)
-
-        # Export button
-        export_btn = ttk.Button(
-            header_frame,
-            text="Export CSV",
-            style="TButton",
-            command=self._on_export,
-        )
-        export_btn.pack(side=tk.RIGHT)
+        # Header
+        header = PageHeader(self, title="Positions", subtitle="Portfolio holdings and lot details")
+        header.pack(fill=tk.X, pady=(0, Spacing.LG))
+        header.add_action_button("Export CSV", self._on_export)
 
         # Summary bar
         self.summary_frame = tk.Frame(self, bg=Colors.BG_SECONDARY)

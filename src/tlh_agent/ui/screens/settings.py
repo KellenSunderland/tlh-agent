@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from tlh_agent.ui.base import BaseScreen
+from tlh_agent.ui.components.page_header import PageHeader
 from tlh_agent.ui.theme import Colors, Fonts, Spacing
 
 
@@ -12,43 +13,13 @@ class SettingsScreen(BaseScreen):
 
     def _setup_ui(self) -> None:
         """Set up the settings layout."""
-        # Header row
-        header_frame = ttk.Frame(self, style="TFrame")
-        header_frame.pack(fill=tk.X, pady=(0, Spacing.LG))
-
-        header = ttk.Label(header_frame, text="Settings", style="Heading.TLabel")
-        header.pack(side=tk.LEFT)
-
-        # Action buttons
-        btn_frame = tk.Frame(header_frame, bg=Colors.BG_PRIMARY)
-        btn_frame.pack(side=tk.RIGHT)
-
-        tk.Button(
-            btn_frame,
-            text="Reset to Defaults",
-            font=Fonts.BODY,
-            fg=Colors.TEXT_PRIMARY,
-            bg=Colors.BG_TERTIARY,
-            relief=tk.FLAT,
-            padx=Spacing.MD,
-            pady=Spacing.XS,
-            cursor="hand2",
-            command=self._on_reset,
-        ).pack(side=tk.LEFT, padx=(0, Spacing.SM))
-
-        tk.Button(
-            btn_frame,
-            text="Save",
-            font=Fonts.BODY_BOLD,
-            fg=Colors.BG_PRIMARY,
-            bg=Colors.ACCENT,
-            activebackground=Colors.ACCENT_HOVER,
-            relief=tk.FLAT,
-            padx=Spacing.LG,
-            pady=Spacing.XS,
-            cursor="hand2",
-            command=self._on_save,
-        ).pack(side=tk.LEFT)
+        # Header
+        header = PageHeader(
+            self, title="Settings", subtitle="Configure harvesting rules and preferences"
+        )
+        header.pack(fill=tk.X, pady=(0, Spacing.LG))
+        header.add_action_button("Reset", self._on_reset)
+        header.add_action_button("Save", self._on_save, primary=True)
 
         # Scrollable settings area
         canvas = tk.Canvas(self, bg=Colors.BG_PRIMARY, highlightthickness=0)

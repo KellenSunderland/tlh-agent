@@ -7,6 +7,7 @@ from typing import Any
 from tlh_agent.data.mock_data import HarvestOpportunity, MockDataFactory
 from tlh_agent.ui.base import BaseScreen
 from tlh_agent.ui.components.data_table import ColumnDef, DataTable
+from tlh_agent.ui.components.page_header import PageHeader
 from tlh_agent.ui.theme import Colors, Fonts, Spacing
 
 
@@ -15,16 +16,15 @@ class HarvestQueueScreen(BaseScreen):
 
     def _setup_ui(self) -> None:
         """Set up the harvest queue layout."""
-        # Header row
-        header_frame = ttk.Frame(self, style="TFrame")
-        header_frame.pack(fill=tk.X, pady=(0, Spacing.LG))
+        # Header
+        header = PageHeader(
+            self, title="Harvest Queue", subtitle="Review and execute harvest opportunities"
+        )
+        header.pack(fill=tk.X, pady=(0, Spacing.LG))
 
-        header = ttk.Label(header_frame, text="Harvest Queue", style="Heading.TLabel")
-        header.pack(side=tk.LEFT)
-
-        # Total savings display
+        # Total savings display in header actions
         self.total_savings_label = tk.Label(
-            header_frame,
+            header.actions,
             text="Potential Savings: $0.00",
             font=Fonts.BODY_BOLD,
             fg=Colors.SUCCESS_TEXT,

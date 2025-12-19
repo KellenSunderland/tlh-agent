@@ -6,6 +6,7 @@ from tkinter import ttk
 
 from tlh_agent.data.mock_data import MockDataFactory
 from tlh_agent.ui.base import BaseScreen
+from tlh_agent.ui.components.page_header import PageHeader
 from tlh_agent.ui.theme import Colors, Fonts, Spacing
 
 
@@ -14,21 +15,12 @@ class LossLedgerScreen(BaseScreen):
 
     def _setup_ui(self) -> None:
         """Set up the loss ledger layout."""
-        # Header row
-        header_frame = ttk.Frame(self, style="TFrame")
-        header_frame.pack(fill=tk.X, pady=(0, Spacing.LG))
-
-        header = ttk.Label(header_frame, text="Loss Ledger", style="Heading.TLabel")
-        header.pack(side=tk.LEFT)
-
-        # Export button
-        export_btn = ttk.Button(
-            header_frame,
-            text="Export Tax Report",
-            style="TButton",
-            command=self._on_export,
+        # Header
+        header = PageHeader(
+            self, title="Loss Ledger", subtitle="Carryforward losses and tax benefits"
         )
-        export_btn.pack(side=tk.RIGHT)
+        header.pack(fill=tk.X, pady=(0, Spacing.LG))
+        header.add_action_button("Export Tax Report", self._on_export)
 
         # Carryforward summary card
         summary_card = tk.Frame(self, bg=Colors.BG_SECONDARY)

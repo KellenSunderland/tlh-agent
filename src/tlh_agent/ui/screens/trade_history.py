@@ -8,6 +8,7 @@ from tlh_agent.data.mock_data import MockDataFactory, Trade
 from tlh_agent.ui.base import BaseScreen
 from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.data_table import ColumnDef, DataTable
+from tlh_agent.ui.components.page_header import PageHeader
 from tlh_agent.ui.theme import Colors, Fonts, Spacing
 
 
@@ -16,29 +17,12 @@ class TradeHistoryScreen(BaseScreen):
 
     def _setup_ui(self) -> None:
         """Set up the trade history layout."""
-        # Header row
-        header_frame = ttk.Frame(self, style="TFrame")
-        header_frame.pack(fill=tk.X, pady=(0, Spacing.LG))
-
-        header = ttk.Label(header_frame, text="Trade History", style="Heading.TLabel")
-        header.pack(side=tk.LEFT)
-
-        # Export button
-        export_btn = tk.Button(
-            header_frame,
-            text="Export CSV",
-            font=Fonts.BODY,
-            fg=Colors.TEXT_PRIMARY,
-            bg=Colors.BG_TERTIARY,
-            activebackground=Colors.BORDER_LIGHT,
-            activeforeground=Colors.TEXT_PRIMARY,
-            relief=tk.FLAT,
-            cursor="hand2",
-            padx=Spacing.MD,
-            pady=Spacing.XS,
-            command=self._on_export,
+        # Header
+        header = PageHeader(
+            self, title="Trade History", subtitle="Executed trades and harvest events"
         )
-        export_btn.pack(side=tk.RIGHT)
+        header.pack(fill=tk.X, pady=(0, Spacing.LG))
+        header.add_action_button("Export CSV", self._on_export)
 
         # Filters card
         filters_card = Card(self, title="Filters")
