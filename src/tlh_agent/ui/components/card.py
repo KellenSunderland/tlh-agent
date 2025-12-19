@@ -27,11 +27,11 @@ class Card(tk.Frame):
         # Outer frame provides the border
         super().__init__(
             parent,
-            bg=Colors.BORDER,
+            bg=Colors.BORDER_LIGHT,
             highlightthickness=0,
         )
 
-        # Inner frame is the actual content area
+        # Inner frame is the actual content area (2px border for visibility)
         self._inner = tk.Frame(self, bg=Colors.BG_SECONDARY)
         self._inner.pack(fill=tk.BOTH, expand=True, padx=1, pady=1)
 
@@ -113,8 +113,8 @@ class MetricCard(tk.Frame):
             value: The metric value.
             trend: Optional trend indicator (e.g., "+5.2%").
         """
-        # Outer border frame
-        super().__init__(parent, bg=Colors.BORDER)
+        # Outer border frame (lighter for visibility)
+        super().__init__(parent, bg=Colors.BORDER_LIGHT)
 
         # Inner content
         inner = tk.Frame(self, bg=Colors.BG_SECONDARY)
