@@ -313,7 +313,22 @@ class Theme:
             background=Colors.BG_TERTIARY,
             foreground=Colors.TEXT_PRIMARY,
             arrowcolor=Colors.TEXT_PRIMARY,
+            selectbackground=Colors.BG_TERTIARY,
+            selectforeground=Colors.TEXT_PRIMARY,
         )
+        style.map(
+            "TCombobox",
+            fieldbackground=[("readonly", Colors.BG_INPUT)],
+            foreground=[("readonly", Colors.TEXT_PRIMARY)],
+            selectbackground=[("readonly", Colors.BG_TERTIARY)],
+            selectforeground=[("readonly", Colors.TEXT_PRIMARY)],
+        )
+
+        # Style the combobox dropdown list (Tk Listbox, not ttk)
+        root.option_add("*TCombobox*Listbox.background", Colors.BG_SECONDARY)
+        root.option_add("*TCombobox*Listbox.foreground", Colors.TEXT_PRIMARY)
+        root.option_add("*TCombobox*Listbox.selectBackground", Colors.ACCENT)
+        root.option_add("*TCombobox*Listbox.selectForeground", Colors.BG_PRIMARY)
 
         # Checkbutton styles
         style.configure(
