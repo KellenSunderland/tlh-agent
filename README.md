@@ -480,6 +480,46 @@ uv run pytest
 uv run pytest --cov=tlh_agent  # With coverage
 ```
 
+### Visual UI Testing
+
+The project includes a visual testing system that generates screenshots for UI validation. This enables AI-assisted review of UI changes.
+
+**How it works:**
+
+1. **Screenshot Generation** — Tests create a real tkinter window, navigate to each screen, and capture screenshots using PIL's ImageGrab
+2. **AI Review** — Screenshots can be reviewed by multimodal AI (Claude) to assess visual quality, alignment, and design consistency
+3. **Iterative Refinement** — Issues identified visually are fixed and re-tested
+
+**Running visual tests:**
+
+```bash
+# Generate screenshots for all screens
+uv run pytest tests/ui/ -v
+
+# Screenshots saved to screenshots/ directory
+ls screenshots/
+# 01_dashboard.png  02_positions.png  03_harvest_queue.png ...
+```
+
+**Test structure:**
+
+```
+tests/ui/
+├── conftest.py          # Fixtures: app instance, screenshot capture
+├── ui_test_helpers.py   # Widget inspection utilities
+└── test_screens.py      # Screen tests and screenshot generation
+```
+
+**What gets validated:**
+
+| Method | Purpose |
+|--------|---------|
+| `find_widgets_with_text()` | Verify expected text exists |
+| `check_widgets_aligned_horizontally()` | Layout alignment checks |
+| Screenshot review | Visual design quality (manual/AI) |
+
+This approach combines automated functional tests with visual inspection, catching both logic errors and design regressions.
+
 ### Building for Distribution
 
 ```bash
