@@ -1,4 +1,10 @@
-"""Harvest queue screen for managing pending harvest recommendations."""
+"""Trade queue screen for managing pending trade recommendations.
+
+Displays trades from multiple sources:
+- Harvest opportunities (tax-loss harvesting sells)
+- Index buys (S&P 500 tracking purchases)
+- Rebalance trades (drift correction)
+"""
 
 import tkinter as tk
 from tkinter import ttk
@@ -15,14 +21,12 @@ from tlh_agent.ui.theme import Colors, Fonts, Spacing
 
 
 class HarvestQueueScreen(BaseScreen):
-    """Screen for reviewing and acting on harvest recommendations."""
+    """Screen for reviewing and acting on pending trades from all sources."""
 
     def _setup_ui(self) -> None:
-        """Set up the harvest queue layout."""
+        """Set up the trade queue layout."""
         # Header
-        header = PageHeader(
-            self, title="Harvest Queue", subtitle="Review and execute harvest opportunities"
-        )
+        header = PageHeader(self, title="Trade Queue", subtitle="Review and execute pending trades")
         header.pack(fill=tk.X, pady=(0, Spacing.LG))
 
         # Total savings display in header actions
@@ -68,19 +72,19 @@ class HarvestQueueScreen(BaseScreen):
             value_label.pack(anchor=tk.W)
             self.summary_labels[key] = value_label
 
-        # Harvest opportunities table in card
-        table_card = Card(self, title="Harvest Opportunities")
+        # Trade queue table in card
+        table_card = Card(self, title="Pending Trades")
         table_card.pack(fill=tk.BOTH, expand=True, pady=(0, Spacing.MD))
 
         columns = [
-            ColumnDef("status", "Status", width=80),
-            ColumnDef("ticker", "Ticker", width=80),
-            ColumnDef("name", "Name", width=180),
-            ColumnDef("shares", "Shares", width=80, anchor="e"),
-            ColumnDef("loss", "Loss", width=100, anchor="e"),
-            ColumnDef("benefit", "Tax Benefit", width=100, anchor="e"),
-            ColumnDef("action", "Action", width=80),
-            ColumnDef("swap_target", "Swap To", width=80),
+            ColumnDef("trade_type", "Type", width=80),
+            ColumnDef("status", "Status", width=70),
+            ColumnDef("ticker", "Ticker", width=70),
+            ColumnDef("name", "Name", width=150),
+            ColumnDef("action", "Action", width=60),
+            ColumnDef("shares", "Shares", width=70, anchor="e"),
+            ColumnDef("amount", "Amount", width=90, anchor="e"),
+            ColumnDef("tax_benefit", "Tax Benefit", width=90, anchor="e"),
         ]
 
         self.table = DataTable(
@@ -184,7 +188,7 @@ class HarvestQueueScreen(BaseScreen):
 
         self.details_label = tk.Label(
             self.details_frame,
-            text="Select a harvest opportunity to view details",
+            text="Select a trade to view details",
             font=Fonts.BODY,
             fg=Colors.TEXT_MUTED,
             bg=Colors.BG_SECONDARY,
@@ -235,16 +239,19 @@ class HarvestQueueScreen(BaseScreen):
             elif opp.status in ("rejected", "expired"):
                 tag = "muted"
 
+            # Calculate amount (market value)
+            amount = opp.shares * opp.current_price
+
             table_data.append(
                 {
+                    "trade_type": "Harvest",
                     "status": status_display,
                     "ticker": opp.ticker,
                     "name": opp.name,
+                    "action": "Sell",
                     "shares": f"{opp.shares:,.2f}",
-                    "loss": f"${opp.unrealized_loss:,.2f}",
-                    "benefit": f"${opp.estimated_tax_benefit:,.2f}",
-                    "action": opp.recommended_action.title(),
-                    "swap_target": opp.swap_target or "-",
+                    "amount": f"${amount:,.2f}",
+                    "tax_benefit": f"${opp.estimated_tax_benefit:,.2f}",
                     "tag": tag,
                     "_opportunity": opp,
                 }

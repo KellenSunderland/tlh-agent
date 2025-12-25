@@ -13,7 +13,7 @@ class NavSidebar(tk.Frame):
     NAV_ITEMS: ClassVar[list[tuple[str, str, str]]] = [
         ("dashboard", "Dashboard", "📊"),
         ("positions", "Positions", "📈"),
-        ("harvest", "Harvest Queue", "🌾"),
+        ("harvest", "Trade Queue", "📝"),
         ("wash_sales", "Wash Sales", "📅"),
         ("history", "Trade History", "📋"),
         ("ledger", "Loss Ledger", "📒"),
