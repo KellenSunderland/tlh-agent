@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import ttk
 
 from tlh_agent.services import get_provider
+from tlh_agent.ui.components.assistant_pane import AssistantPane
 from tlh_agent.ui.components.nav_sidebar import NavSidebar
 from tlh_agent.ui.theme import Colors, Fonts, Theme
 
@@ -21,6 +22,7 @@ class MainWindow(ttk.Frame):
 
         self._screens: dict[str, ttk.Frame] = {}
         self._current_screen: str | None = None
+        self._assistant_visible: bool = False
 
         self._setup_ui()
 
@@ -46,17 +48,45 @@ class MainWindow(ttk.Frame):
             self._mock_banner.pack(fill=tk.X)
             self._mock_banner.pack_propagate(False)
 
+            banner_content = tk.Frame(self._mock_banner, bg=Colors.WARNING)
+            banner_content.pack(fill=tk.X, expand=True)
+
             tk.Label(
-                self._mock_banner,
+                banner_content,
                 text="DEMO MODE - Displaying sample data. Connect Alpaca API for live data.",
                 font=Fonts.BODY_BOLD,
                 fg=Colors.BG_PRIMARY,
                 bg=Colors.WARNING,
-            ).pack(expand=True)
+            ).pack(side=tk.LEFT, expand=True)
+
+            # Assistant toggle button in banner
+            self._toggle_btn = tk.Button(
+                banner_content,
+                text="Claude",
+                font=Fonts.BODY,
+                fg=Colors.BG_PRIMARY,
+                bg=Colors.ACCENT,
+                activebackground=Colors.ACCENT_HOVER,
+                activeforeground=Colors.BG_PRIMARY,
+                relief=tk.FLAT,
+                padx=Theme.spacing.SM,
+                pady=2,
+                cursor="hand2",
+                command=self._toggle_assistant,
+            )
+            self._toggle_btn.pack(side=tk.RIGHT, padx=Theme.spacing.SM)
 
         # Content area
         self.content_frame = ttk.Frame(content_wrapper, style="TFrame")
         self.content_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Assistant pane (right side, initially hidden)
+        self._assistant_separator = ttk.Separator(self, orient=tk.VERTICAL)
+        self.assistant_pane = AssistantPane(
+            self,
+            on_send=self._on_assistant_message,
+            on_navigate=self._on_navigate,
+        )
 
         # Initialize screens (lazy loading)
         self._init_screens()
@@ -119,3 +149,40 @@ class MainWindow(ttk.Frame):
             )
             self._current_screen = screen_name
             self.sidebar.set_active(screen_name)
+
+    def _toggle_assistant(self) -> None:
+        """Toggle the assistant pane visibility."""
+        if self._assistant_visible:
+            self._hide_assistant()
+        else:
+            self._show_assistant()
+
+    def _show_assistant(self) -> None:
+        """Show the assistant pane."""
+        if not self._assistant_visible:
+            self._assistant_separator.pack(side=tk.RIGHT, fill=tk.Y)
+            self.assistant_pane.pack(side=tk.RIGHT, fill=tk.Y)
+            self._assistant_visible = True
+            if hasattr(self, "_toggle_btn"):
+                self._toggle_btn.configure(text="Claude")
+
+    def _hide_assistant(self) -> None:
+        """Hide the assistant pane."""
+        if self._assistant_visible:
+            self.assistant_pane.pack_forget()
+            self._assistant_separator.pack_forget()
+            self._assistant_visible = False
+            if hasattr(self, "_toggle_btn"):
+                self._toggle_btn.configure(text="Claude")
+
+    def _on_assistant_message(self, message: str) -> None:
+        """Handle a message from the user to the assistant.
+
+        Args:
+            message: The user's message.
+        """
+        # For now, just echo back a placeholder response
+        # This will be connected to ClaudeService in the next step
+        self.assistant_pane.add_assistant_message(
+            "I received your message. Claude integration is coming soon!"
+        )
