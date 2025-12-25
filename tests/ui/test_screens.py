@@ -1,7 +1,5 @@
 """Functional tests for UI screens with screenshots and layout validation."""
 
-
-
 from tests.ui.ui_test_helpers import (
     check_widget_contains_text,
     check_widget_visible,

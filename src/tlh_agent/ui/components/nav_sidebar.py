@@ -149,8 +149,13 @@ class NavSidebar(tk.Frame):
             widget.bind(
                 "<Leave>",
                 make_leave_handler(
-                    btn_container, btn_frame, content_frame, icon_label, text_label, accent_bar,
-                    screen_id
+                    btn_container,
+                    btn_frame,
+                    content_frame,
+                    icon_label,
+                    text_label,
+                    accent_bar,
+                    screen_id,
                 ),
             )
 

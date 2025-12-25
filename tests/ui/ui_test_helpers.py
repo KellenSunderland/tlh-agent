@@ -101,9 +101,7 @@ def find_widgets_by_type(
     return results
 
 
-def find_widgets_with_text(
-    parent: tk.Widget, text: str, partial: bool = False
-) -> list[tk.Widget]:
+def find_widgets_with_text(parent: tk.Widget, text: str, partial: bool = False) -> list[tk.Widget]:
     """Find widgets containing specific text.
 
     Args:
@@ -144,9 +142,7 @@ def check_widget_visible(widget: tk.Widget) -> bool:
     return widget.winfo_viewable() and widget.winfo_width() > 0 and widget.winfo_height() > 0
 
 
-def check_widgets_aligned_horizontally(
-    widgets: list[tk.Widget], tolerance: int = 5
-) -> bool:
+def check_widgets_aligned_horizontally(widgets: list[tk.Widget], tolerance: int = 5) -> bool:
     """Check if widgets are horizontally aligned (same y position).
 
     Args:
@@ -166,9 +162,7 @@ def check_widgets_aligned_horizontally(
     return all(abs(w.winfo_rooty() - base_y) <= tolerance for w in widgets[1:])
 
 
-def check_widgets_aligned_vertically(
-    widgets: list[tk.Widget], tolerance: int = 5
-) -> bool:
+def check_widgets_aligned_vertically(widgets: list[tk.Widget], tolerance: int = 5) -> bool:
     """Check if widgets are vertically aligned (same x position).
 
     Args:
@@ -204,9 +198,7 @@ def check_widget_contains_text(widget: tk.Widget, expected_texts: list[str]) -> 
     all_text_lower = [t.lower() for t in all_texts]
 
     for expected in expected_texts:
-        if expected.lower() in all_text_lower or any(
-            expected.lower() in t for t in all_text_lower
-        ):
+        if expected.lower() in all_text_lower or any(expected.lower() in t for t in all_text_lower):
             results[expected] = True
 
     return results
@@ -282,9 +274,7 @@ def validate_color_format(color: str | None) -> bool:
 
     # Check hex format
     if color.startswith("#"):
-        return len(color) in (4, 7, 9) and all(
-            c in "0123456789abcdefABCDEF" for c in color[1:]
-        )
+        return len(color) in (4, 7, 9) and all(c in "0123456789abcdefABCDEF" for c in color[1:])
 
     # Named colors are also valid
     return True

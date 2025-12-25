@@ -136,9 +136,7 @@ class TestHarvestEvaluator:
         )
         assert evaluator.meets_loss_threshold(position) is True
 
-    def test_meets_loss_threshold_usd_too_low(
-        self, evaluator: HarvestEvaluator
-    ) -> None:
+    def test_meets_loss_threshold_usd_too_low(self, evaluator: HarvestEvaluator) -> None:
         """Test position with loss below USD threshold."""
         # $50 loss on $500 position (10% but only $50)
         position = make_position(
@@ -148,9 +146,7 @@ class TestHarvestEvaluator:
         )
         assert evaluator.meets_loss_threshold(position) is False
 
-    def test_meets_loss_threshold_pct_too_low(
-        self, evaluator: HarvestEvaluator
-    ) -> None:
+    def test_meets_loss_threshold_pct_too_low(self, evaluator: HarvestEvaluator) -> None:
         """Test position with loss below percentage threshold."""
         # $150 loss on $15000 position (only 1%)
         position = make_position(
@@ -178,9 +174,7 @@ class TestHarvestEvaluator:
         )
         assert evaluator.meets_tax_benefit_threshold(position) is True
 
-    def test_meets_tax_benefit_threshold_too_low(
-        self, evaluator: HarvestEvaluator
-    ) -> None:
+    def test_meets_tax_benefit_threshold_too_low(self, evaluator: HarvestEvaluator) -> None:
         """Test tax benefit below threshold."""
         # $100 loss = $35 benefit (below $50 threshold)
         position = make_position(
@@ -203,9 +197,7 @@ class TestHarvestEvaluator:
         days = evaluator.get_holding_days("AAPL", [])
         assert days is None
 
-    def test_get_holding_days_different_ticker(
-        self, evaluator: HarvestEvaluator
-    ) -> None:
+    def test_get_holding_days_different_ticker(self, evaluator: HarvestEvaluator) -> None:
         """Test holding days ignores other tickers."""
         orders = [make_order(symbol="GOOGL")]
         days = evaluator.get_holding_days("AAPL", orders)
@@ -219,9 +211,7 @@ class TestHarvestEvaluator:
 
         assert evaluator.meets_holding_period("AAPL", orders) is True
 
-    def test_meets_holding_period_too_short(
-        self, evaluator: HarvestEvaluator
-    ) -> None:
+    def test_meets_holding_period_too_short(self, evaluator: HarvestEvaluator) -> None:
         """Test holding period when too recently bought."""
         # Bought 3 days ago (below 7 day minimum)
         buy_date = datetime.now() - timedelta(days=3)
@@ -229,15 +219,11 @@ class TestHarvestEvaluator:
 
         assert evaluator.meets_holding_period("AAPL", orders) is False
 
-    def test_meets_holding_period_no_history(
-        self, evaluator: HarvestEvaluator
-    ) -> None:
+    def test_meets_holding_period_no_history(self, evaluator: HarvestEvaluator) -> None:
         """Test holding period allowed when no history."""
         assert evaluator.meets_holding_period("AAPL", []) is True
 
-    def test_qualifies_for_harvest_all_criteria(
-        self, evaluator: HarvestEvaluator
-    ) -> None:
+    def test_qualifies_for_harvest_all_criteria(self, evaluator: HarvestEvaluator) -> None:
         """Test position that meets all harvest criteria."""
         position = make_position(
             qty=Decimal("100"),
@@ -249,9 +235,7 @@ class TestHarvestEvaluator:
 
         assert evaluator.qualifies_for_harvest(position, orders) is True
 
-    def test_qualifies_for_harvest_wash_restricted(
-        self, evaluator: HarvestEvaluator
-    ) -> None:
+    def test_qualifies_for_harvest_wash_restricted(self, evaluator: HarvestEvaluator) -> None:
         """Test position under wash sale restriction doesn't qualify."""
         position = make_position(
             qty=Decimal("100"),
@@ -260,14 +244,9 @@ class TestHarvestEvaluator:
         )
         orders = [make_order(symbol="AAPL")]
 
-        assert (
-            evaluator.qualifies_for_harvest(position, orders, is_wash_restricted=True)
-            is False
-        )
+        assert evaluator.qualifies_for_harvest(position, orders, is_wash_restricted=True) is False
 
-    def test_qualifies_for_harvest_fails_loss(
-        self, evaluator: HarvestEvaluator
-    ) -> None:
+    def test_qualifies_for_harvest_fails_loss(self, evaluator: HarvestEvaluator) -> None:
         """Test position that fails loss threshold doesn't qualify."""
         position = make_position(
             avg_entry_price=Decimal("150.00"),
@@ -277,9 +256,7 @@ class TestHarvestEvaluator:
 
         assert evaluator.qualifies_for_harvest(position, orders) is False
 
-    def test_qualifies_for_harvest_fails_holding(
-        self, evaluator: HarvestEvaluator
-    ) -> None:
+    def test_qualifies_for_harvest_fails_holding(self, evaluator: HarvestEvaluator) -> None:
         """Test position bought too recently doesn't qualify."""
         position = make_position(
             qty=Decimal("100"),
@@ -368,12 +345,8 @@ class TestHarvestEvaluator:
         result = evaluator.apply_portfolio_limit([], Decimal("100000"))
         assert result == []
 
-    def test_apply_portfolio_limit_zero_value(
-        self, evaluator: HarvestEvaluator
-    ) -> None:
+    def test_apply_portfolio_limit_zero_value(self, evaluator: HarvestEvaluator) -> None:
         """Test with zero portfolio value."""
         pos = make_position()
-        result = evaluator.apply_portfolio_limit(
-            [(pos, Decimal("100"))], Decimal("0")
-        )
+        result = evaluator.apply_portfolio_limit([(pos, Decimal("100"))], Decimal("0"))
         assert result == []

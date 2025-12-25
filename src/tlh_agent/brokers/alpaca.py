@@ -138,11 +138,7 @@ class AlpacaClient:
         )
         orders = self._client.get_orders(request)
         # Filter to only filled orders (CLOSED includes cancelled too)
-        return [
-            self._convert_order(o)
-            for o in orders
-            if o.status == OrderStatus.FILLED
-        ]
+        return [self._convert_order(o) for o in orders if o.status == OrderStatus.FILLED]
 
     def get_order(self, order_id: str) -> AlpacaOrder:
         """Get a specific order by ID.
@@ -235,9 +231,7 @@ class AlpacaClient:
             qty=Decimal(str(order.qty or 0)),
             filled_qty=Decimal(str(order.filled_qty or 0)),
             filled_avg_price=(
-                Decimal(str(order.filled_avg_price))
-                if order.filled_avg_price
-                else None
+                Decimal(str(order.filled_avg_price)) if order.filled_avg_price else None
             ),
             status=order.status.value if order.status else "unknown",
             submitted_at=order.submitted_at or datetime.now(),

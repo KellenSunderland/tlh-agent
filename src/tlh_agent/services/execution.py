@@ -252,17 +252,11 @@ class HarvestExecutionService:
 
         # Count completed harvests
         completed = sum(
-            1 for r in restrictions
-            if r.rebuy_status == "completed"
-            and r.sale_date.year == year
+            1 for r in restrictions if r.rebuy_status == "completed" and r.sale_date.year == year
         )
 
         # Count pending rebuys
-        pending = sum(
-            1 for r in restrictions
-            if r.rebuy_status == "pending"
-            and not r.is_active
-        )
+        pending = sum(1 for r in restrictions if r.rebuy_status == "pending" and not r.is_active)
 
         return {
             "year": year,

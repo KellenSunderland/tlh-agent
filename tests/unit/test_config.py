@@ -122,9 +122,7 @@ class TestAppConfig:
         assert config.config_path == temp_config_dir / "config.json"
         assert config.state_path == temp_config_dir / "state.json"
 
-    def test_env_var_fallback(
-        self, temp_config_dir: Path, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
+    def test_env_var_fallback(self, temp_config_dir: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Test that environment variables are used when keychain has no credentials."""
         monkeypatch.setenv("ALPACA_API_KEY", "env_key")
         monkeypatch.setenv("ALPACA_SECRET_KEY", "env_secret")

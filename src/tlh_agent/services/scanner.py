@@ -107,14 +107,10 @@ class PortfolioScanner:
         order_history = self._portfolio.get_alpaca_orders(days=60)
 
         # Get active restrictions
-        active_restrictions = {
-            r.ticker for r in self._wash_sale.get_active_restrictions()
-        }
+        active_restrictions = {r.ticker for r in self._wash_sale.get_active_restrictions()}
 
         # Get existing queue items
-        queue_items = {
-            item.ticker: item for item in self._store.get_harvest_queue()
-        }
+        queue_items = {item.ticker: item for item in self._store.get_harvest_queue()}
 
         opportunities = []
         positions_with_loss = 0
@@ -172,9 +168,7 @@ class PortfolioScanner:
             opportunities = self._apply_portfolio_limit(opportunities, total_value)
 
         # Calculate totals
-        total_benefit = sum(
-            (o.estimated_tax_benefit for o in opportunities), Decimal("0")
-        )
+        total_benefit = sum((o.estimated_tax_benefit for o in opportunities), Decimal("0"))
 
         return ScanResult(
             opportunities=opportunities,

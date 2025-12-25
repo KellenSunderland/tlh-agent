@@ -250,9 +250,7 @@ class TestPortfolioService:
         assert trades[0].ticker == "GOOGL"
         assert trades[1].ticker == "AAPL"
 
-    def test_get_trade_history_with_filters(
-        self, portfolio_service: PortfolioService
-    ) -> None:
+    def test_get_trade_history_with_filters(self, portfolio_service: PortfolioService) -> None:
         """Test trade history with filters."""
         filters = TradeFilters(ticker="AAPL")
         trades = portfolio_service.get_trade_history(filters=filters)
@@ -260,9 +258,7 @@ class TestPortfolioService:
         assert len(trades) == 1
         assert trades[0].ticker == "AAPL"
 
-    def test_get_trade_history_filter_by_type(
-        self, portfolio_service: PortfolioService
-    ) -> None:
+    def test_get_trade_history_filter_by_type(self, portfolio_service: PortfolioService) -> None:
         """Test filtering by trade type."""
         filters = TradeFilters(trade_type="sell")
         trades = portfolio_service.get_trade_history(filters=filters)
@@ -270,9 +266,7 @@ class TestPortfolioService:
         # All our mock orders are buys
         assert len(trades) == 0
 
-    def test_get_trade_history_filter_by_date(
-        self, portfolio_service: PortfolioService
-    ) -> None:
+    def test_get_trade_history_filter_by_date(self, portfolio_service: PortfolioService) -> None:
         """Test filtering by date range."""
         filters = TradeFilters(
             start_date=date.today() - timedelta(days=25),

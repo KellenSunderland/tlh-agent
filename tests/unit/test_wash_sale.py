@@ -172,9 +172,7 @@ class TestWashSaleService:
         assert len(pending) == 1
         assert pending[0].ticker == "AAPL"
 
-    def test_would_violate_future_buy(
-        self, wash_sale_service: WashSaleService
-    ) -> None:
+    def test_would_violate_future_buy(self, wash_sale_service: WashSaleService) -> None:
         """Test checking if a buy would violate wash sale rules."""
         # Create a sale
         wash_sale_service.create_restriction(
@@ -196,9 +194,7 @@ class TestWashSaleService:
         # Different ticker never violates
         assert wash_sale_service.would_violate("GOOGL") is False
 
-    def test_would_violate_past_sale(
-        self, wash_sale_service: WashSaleService
-    ) -> None:
+    def test_would_violate_past_sale(self, wash_sale_service: WashSaleService) -> None:
         """Test violation check for buys that happen before a sale."""
         # Create a sale that happened 20 days ago
         sale_date = date.today() - timedelta(days=20)

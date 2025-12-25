@@ -141,8 +141,13 @@ class ServiceProvider:
 
         # Update rules if relevant fields changed
         rule_fields = {
-            "min_loss_usd", "min_loss_pct", "min_tax_benefit",
-            "tax_rate", "min_holding_days", "max_harvest_pct", "wash_sale_days"
+            "min_loss_usd",
+            "min_loss_pct",
+            "min_tax_benefit",
+            "tax_rate",
+            "min_holding_days",
+            "max_harvest_pct",
+            "wash_sale_days",
         }
 
         if any(k in rule_fields for k in kwargs):

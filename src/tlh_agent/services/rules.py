@@ -125,9 +125,7 @@ class HarvestEvaluator:
         benefit = self.calculate_tax_benefit(position.unrealized_pl)
         return benefit >= self._rules.min_tax_benefit
 
-    def get_holding_days(
-        self, ticker: str, order_history: list[AlpacaOrder]
-    ) -> int | None:
+    def get_holding_days(self, ticker: str, order_history: list[AlpacaOrder]) -> int | None:
         """Get the number of days the position has been held.
 
         Uses the most recent buy order to determine holding period.
@@ -161,9 +159,7 @@ class HarvestEvaluator:
         buy_date = most_recent_buy.filled_at.date()
         return (today - buy_date).days
 
-    def meets_holding_period(
-        self, ticker: str, order_history: list[AlpacaOrder]
-    ) -> bool:
+    def meets_holding_period(self, ticker: str, order_history: list[AlpacaOrder]) -> bool:
         """Check if position meets minimum holding period.
 
         Args:

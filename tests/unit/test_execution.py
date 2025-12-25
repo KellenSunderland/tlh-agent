@@ -358,6 +358,7 @@ class TestHarvestExecutionService:
         """Test getting execution summary."""
         # Add some loss to ledger
         from tlh_agent.data.local_store import LossLedgerYear
+
         ledger = LossLedgerYear(
             short_term_losses=Decimal("1500"),
             long_term_losses=Decimal("500"),

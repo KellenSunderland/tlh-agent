@@ -108,11 +108,7 @@ class WashSaleService:
             List of restrictions pending rebuy.
         """
         all_restrictions = self._store.get_restrictions()
-        return [
-            r
-            for r in all_restrictions
-            if not r.is_active and r.rebuy_status == "pending"
-        ]
+        return [r for r in all_restrictions if not r.is_active and r.rebuy_status == "pending"]
 
     def get_clear_date(self, ticker: str) -> date | None:
         """Get the date when a ticker will be clear for rebuy.

@@ -320,9 +320,7 @@ class TestPortfolioScanner:
             min_loss_pct=Decimal("1.0"),  # Lower threshold
             max_harvest_pct=Decimal("50.0"),  # Higher limit
         )
-        scanner = PortfolioScanner(
-            mock_portfolio_service, wash_sale, temp_store, rules
-        )
+        scanner = PortfolioScanner(mock_portfolio_service, wash_sale, temp_store, rules)
 
         result = scanner.scan()
 
@@ -339,9 +337,7 @@ class TestPortfolioScanner:
         assert queue_item.status == "pending"
         assert scanner.get_pending_harvests()[0].id == queue_item.id
 
-    def test_approve_harvest(
-        self, scanner: PortfolioScanner, temp_store: LocalStore
-    ) -> None:
+    def test_approve_harvest(self, scanner: PortfolioScanner, temp_store: LocalStore) -> None:
         """Test approving a queued harvest."""
         result = scanner.scan()
         opp = result.opportunities[0]
@@ -353,9 +349,7 @@ class TestPortfolioScanner:
         assert len(approved) == 1
         assert approved[0].status == "approved"
 
-    def test_reject_harvest(
-        self, scanner: PortfolioScanner, temp_store: LocalStore
-    ) -> None:
+    def test_reject_harvest(self, scanner: PortfolioScanner, temp_store: LocalStore) -> None:
         """Test rejecting a queued harvest."""
         result = scanner.scan()
         opp = result.opportunities[0]

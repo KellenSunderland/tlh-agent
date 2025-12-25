@@ -204,8 +204,7 @@ class LocalStore:
     def get_restrictions(self) -> list[WashSaleRestriction]:
         """Get all wash sale restrictions."""
         return [
-            WashSaleRestriction.from_dict(r)
-            for r in self._data.get("wash_sale_restrictions", [])
+            WashSaleRestriction.from_dict(r) for r in self._data.get("wash_sale_restrictions", [])
         ]
 
     def get_active_restrictions(self) -> list[WashSaleRestriction]:
@@ -247,9 +246,7 @@ class LocalStore:
     def get_loss_ledger(self) -> dict[int, LossLedgerYear]:
         """Get the full loss ledger."""
         ledger = self._data.get("loss_ledger", {})
-        return {
-            int(year): LossLedgerYear.from_dict(data) for year, data in ledger.items()
-        }
+        return {int(year): LossLedgerYear.from_dict(data) for year, data in ledger.items()}
 
     def get_loss_ledger_year(self, year: int) -> LossLedgerYear:
         """Get loss ledger for a specific year."""
@@ -267,10 +264,7 @@ class LocalStore:
 
     def get_harvest_queue(self) -> list[HarvestQueueItem]:
         """Get all harvest queue items."""
-        return [
-            HarvestQueueItem.from_dict(item)
-            for item in self._data.get("harvest_queue", [])
-        ]
+        return [HarvestQueueItem.from_dict(item) for item in self._data.get("harvest_queue", [])]
 
     def get_pending_harvests(self) -> list[HarvestQueueItem]:
         """Get pending harvest items."""
@@ -310,8 +304,7 @@ class LocalStore:
         self._data["harvest_queue"] = [
             q
             for q in queue
-            if q["status"] != "pending"
-            or _parse_datetime(q.get("created_at")) >= cutoff  # type: ignore[operator]
+            if q["status"] != "pending" or _parse_datetime(q.get("created_at")) >= cutoff  # type: ignore[operator]
         ]
 
         if len(self._data["harvest_queue"]) != original_count:

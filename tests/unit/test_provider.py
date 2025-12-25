@@ -81,6 +81,7 @@ class TestServiceProvider:
         """Test rules are created from config."""
         # Create config with custom values
         from tlh_agent.config import AppConfig
+
         config = AppConfig(
             config_dir=temp_config_dir,
             min_loss_usd=Decimal("200"),
