@@ -2,8 +2,14 @@
 
 import tkinter as tk
 from decimal import Decimal
-from tkinter import ttk
+from tkinter import messagebox, ttk
 
+from tlh_agent.credentials import (
+    delete_claude_api_key,
+    get_claude_api_key,
+    has_claude_api_key,
+    set_claude_api_key,
+)
 from tlh_agent.services import get_provider
 from tlh_agent.ui.base import BaseScreen
 from tlh_agent.ui.components.card import Card
@@ -40,6 +46,7 @@ class SettingsScreen(BaseScreen):
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
         # Build settings sections
+        self._build_claude_settings()
         self._build_scanner_settings()
         self._build_rebuy_settings()
         self._build_rules_settings()
@@ -111,6 +118,222 @@ class SettingsScreen(BaseScreen):
             var = tk.StringVar(value=default)
 
         return var
+
+    def _build_claude_settings(self) -> None:
+        """Build Claude AI settings section."""
+        content = self._build_section("Claude AI Assistant")
+
+        # API Key field (password style)
+        row = tk.Frame(content, bg=Colors.BG_SECONDARY)
+        row.pack(fill=tk.X, pady=2)
+
+        tk.Label(
+            row,
+            text="API Key:",
+            font=Fonts.BODY,
+            fg=Colors.TEXT_PRIMARY,
+            bg=Colors.BG_SECONDARY,
+            width=25,
+            anchor=tk.W,
+        ).pack(side=tk.LEFT)
+
+        self.claude_api_key = tk.StringVar()
+        self.claude_api_entry = ttk.Entry(row, textvariable=self.claude_api_key, width=30, show="•")
+        self.claude_api_entry.pack(side=tk.LEFT)
+
+        # Show/Hide toggle
+        self._api_key_visible = False
+        self.toggle_btn = tk.Button(
+            row,
+            text="Show",
+            font=Fonts.CAPTION,
+            fg=Colors.TEXT_MUTED,
+            bg=Colors.BG_SECONDARY,
+            activebackground=Colors.BG_TERTIARY,
+            relief=tk.FLAT,
+            command=self._toggle_api_key_visibility,
+        )
+        self.toggle_btn.pack(side=tk.LEFT, padx=Spacing.XS)
+
+        # Model selection
+        self.claude_model = self._build_field(
+            content,
+            "Model:",
+            widget_type="dropdown",
+            options=[
+                "claude-sonnet-4-20250514",
+                "claude-3-5-sonnet-20241022",
+                "claude-3-haiku-20240307",
+            ],
+            default="claude-sonnet-4-20250514",
+        )
+
+        # Status indicator
+        status_row = tk.Frame(content, bg=Colors.BG_SECONDARY)
+        status_row.pack(fill=tk.X, pady=2)
+
+        tk.Label(
+            status_row,
+            text="Status:",
+            font=Fonts.BODY,
+            fg=Colors.TEXT_PRIMARY,
+            bg=Colors.BG_SECONDARY,
+            width=25,
+            anchor=tk.W,
+        ).pack(side=tk.LEFT)
+
+        self.claude_status = tk.Label(
+            status_row,
+            text="Not configured",
+            font=Fonts.BODY,
+            fg=Colors.TEXT_MUTED,
+            bg=Colors.BG_SECONDARY,
+        )
+        self.claude_status.pack(side=tk.LEFT)
+
+        # Buttons row
+        buttons_row = tk.Frame(content, bg=Colors.BG_SECONDARY)
+        buttons_row.pack(fill=tk.X, pady=(Spacing.SM, 0))
+
+        # Spacer to align with other fields
+        tk.Label(
+            buttons_row,
+            text="",
+            font=Fonts.BODY,
+            bg=Colors.BG_SECONDARY,
+            width=25,
+        ).pack(side=tk.LEFT)
+
+        self.save_api_btn = tk.Button(
+            buttons_row,
+            text="Save API Key",
+            font=Fonts.BODY,
+            fg=Colors.BG_PRIMARY,
+            bg=Colors.ACCENT,
+            activebackground=Colors.ACCENT_HOVER,
+            activeforeground=Colors.BG_PRIMARY,
+            relief=tk.FLAT,
+            padx=Spacing.SM,
+            pady=Spacing.XS,
+            command=self._save_claude_api_key,
+        )
+        self.save_api_btn.pack(side=tk.LEFT, padx=(0, Spacing.XS))
+
+        self.test_btn = tk.Button(
+            buttons_row,
+            text="Test Connection",
+            font=Fonts.BODY,
+            fg=Colors.TEXT_PRIMARY,
+            bg=Colors.BG_TERTIARY,
+            activebackground=Colors.BG_SECONDARY,
+            relief=tk.FLAT,
+            padx=Spacing.SM,
+            pady=Spacing.XS,
+            command=self._test_claude_connection,
+        )
+        self.test_btn.pack(side=tk.LEFT, padx=(0, Spacing.XS))
+
+        self.clear_api_btn = tk.Button(
+            buttons_row,
+            text="Clear",
+            font=Fonts.BODY,
+            fg=Colors.DANGER_TEXT,
+            bg=Colors.BG_TERTIARY,
+            activebackground=Colors.BG_SECONDARY,
+            relief=tk.FLAT,
+            padx=Spacing.SM,
+            pady=Spacing.XS,
+            command=self._clear_claude_api_key,
+        )
+        self.clear_api_btn.pack(side=tk.LEFT)
+
+        # Load current status
+        self._update_claude_status()
+
+    def _toggle_api_key_visibility(self) -> None:
+        """Toggle API key visibility."""
+        self._api_key_visible = not self._api_key_visible
+        if self._api_key_visible:
+            self.claude_api_entry.configure(show="")
+            self.toggle_btn.configure(text="Hide")
+        else:
+            self.claude_api_entry.configure(show="•")
+            self.toggle_btn.configure(text="Show")
+
+    def _update_claude_status(self) -> None:
+        """Update Claude status indicator."""
+        if has_claude_api_key():
+            self.claude_status.configure(text="Configured ✓", fg=Colors.SUCCESS_TEXT)
+            # Show masked key
+            key = get_claude_api_key()
+            if key:
+                masked = key[:8] + "..." + key[-4:] if len(key) > 12 else "****"
+                self.claude_api_key.set(masked)
+        else:
+            self.claude_status.configure(text="Not configured", fg=Colors.TEXT_MUTED)
+            self.claude_api_key.set("")
+
+    def _save_claude_api_key(self) -> None:
+        """Save Claude API key to keychain."""
+        key = self.claude_api_key.get().strip()
+
+        # Check if it's a masked key (user didn't change it)
+        if "..." in key:
+            messagebox.showinfo("Info", "Enter a new API key to save.")
+            return
+
+        if not key or not key.startswith("sk-"):
+            messagebox.showerror(
+                "Error", "Invalid API key format. Key should start with 'sk-'"
+            )
+            return
+
+        set_claude_api_key(key)
+        self._update_claude_status()
+        messagebox.showinfo("Success", "Claude API key saved to keychain.")
+
+    def _test_claude_connection(self) -> None:
+        """Test Claude API connection."""
+        key = get_claude_api_key()
+        if not key:
+            messagebox.showwarning(
+                "Warning", "No API key configured. Please save an API key first."
+            )
+            return
+
+        # Try to import and test
+        try:
+            import anthropic
+
+            client = anthropic.Anthropic(api_key=key)
+            # Make a minimal API call
+            client.messages.create(
+                model="claude-3-haiku-20240307",
+                max_tokens=10,
+                messages=[{"role": "user", "content": "Say 'OK'"}],
+            )
+            messagebox.showinfo(
+                "Success", "Connection successful! Claude API is working."
+            )
+        except anthropic.AuthenticationError:
+            messagebox.showerror(
+                "Error", "Authentication failed. Please check your API key."
+            )
+        except anthropic.RateLimitError:
+            messagebox.showwarning("Warning", "Rate limited, but API key is valid.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Connection failed: {e}")
+
+    def _clear_claude_api_key(self) -> None:
+        """Clear Claude API key from keychain."""
+        if not has_claude_api_key():
+            messagebox.showinfo("Info", "No API key to clear.")
+            return
+
+        if messagebox.askyesno("Confirm", "Are you sure you want to remove the Claude API key?"):
+            delete_claude_api_key()
+            self._update_claude_status()
+            messagebox.showinfo("Success", "Claude API key removed from keychain.")
 
     def _build_scanner_settings(self) -> None:
         """Build scanner settings section."""
