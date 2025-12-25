@@ -114,17 +114,17 @@ class MainWindow(ttk.Frame):
     def _init_screens(self) -> None:
         """Initialize all application screens."""
         from tlh_agent.ui.screens.dashboard import DashboardScreen
-        from tlh_agent.ui.screens.harvest_queue import HarvestQueueScreen
         from tlh_agent.ui.screens.loss_ledger import LossLedgerScreen
         from tlh_agent.ui.screens.positions import PositionsScreen
         from tlh_agent.ui.screens.settings import SettingsScreen
         from tlh_agent.ui.screens.trade_history import TradeHistoryScreen
+        from tlh_agent.ui.screens.trade_queue import TradeQueueScreen
         from tlh_agent.ui.screens.wash_calendar import WashCalendarScreen
 
         screen_classes = {
             "dashboard": DashboardScreen,
             "positions": PositionsScreen,
-            "harvest": HarvestQueueScreen,
+            "harvest": TradeQueueScreen,
             "wash_sales": WashCalendarScreen,
             "history": TradeHistoryScreen,
             "ledger": LossLedgerScreen,

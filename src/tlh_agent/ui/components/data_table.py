@@ -214,27 +214,36 @@ class DataTable(ttk.Frame):
         if item != self._hovered_item:
             # Remove hover from previous item
             if self._hovered_item:
-                tags = list(self._tree.item(self._hovered_item, "tags"))
-                if "hover" in tags:
-                    tags.remove("hover")
-                    self._tree.item(self._hovered_item, tags=tags)
+                try:
+                    tags = list(self._tree.item(self._hovered_item, "tags"))
+                    if "hover" in tags:
+                        tags.remove("hover")
+                        self._tree.item(self._hovered_item, tags=tags)
+                except Exception:
+                    pass  # Item may have been deleted during refresh
 
             # Add hover to new item
             if item:
-                tags = list(self._tree.item(item, "tags"))
-                if "hover" not in tags:
-                    tags.append("hover")
-                    self._tree.item(item, tags=tags)
+                try:
+                    tags = list(self._tree.item(item, "tags"))
+                    if "hover" not in tags:
+                        tags.append("hover")
+                        self._tree.item(item, tags=tags)
+                except Exception:
+                    item = None  # Item may have been deleted
 
             self._hovered_item = item
 
     def _handle_leave(self, event: tk.Event) -> None:  # type: ignore[type-arg]
         """Handle mouse leaving the table."""
         if self._hovered_item:
-            tags = list(self._tree.item(self._hovered_item, "tags"))
-            if "hover" in tags:
-                tags.remove("hover")
-                self._tree.item(self._hovered_item, tags=tags)
+            try:
+                tags = list(self._tree.item(self._hovered_item, "tags"))
+                if "hover" in tags:
+                    tags.remove("hover")
+                    self._tree.item(self._hovered_item, tags=tags)
+            except Exception:
+                pass  # Item may have been deleted during refresh
             self._hovered_item = None
 
     def get_selected(self) -> dict[str, Any] | None:

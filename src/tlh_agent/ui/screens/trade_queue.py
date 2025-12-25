@@ -21,7 +21,7 @@ from tlh_agent.ui.components.page_header import PageHeader
 from tlh_agent.ui.theme import Colors, Fonts, Spacing
 
 
-class HarvestQueueScreen(BaseScreen):
+class TradeQueueScreen(BaseScreen):
     """Screen for reviewing and acting on pending trades from all sources."""
 
     def __init__(
@@ -33,9 +33,10 @@ class HarvestQueueScreen(BaseScreen):
 
         Args:
             parent: The parent widget.
-            trade_queue: Optional trade queue service for assistant-added trades.
+            trade_queue: Trade queue service for assistant-added trades.
         """
         self._trade_queue = trade_queue
+        self._all_table_data: list[dict] = []  # Unfiltered data
         super().__init__(parent)
 
     def _setup_ui(self) -> None:
@@ -86,6 +87,40 @@ class HarvestQueueScreen(BaseScreen):
             )
             value_label.pack(anchor=tk.W)
             self.summary_labels[key] = value_label
+
+        # Filter row
+        filter_frame = tk.Frame(self, bg=Colors.BG_PRIMARY)
+        filter_frame.pack(fill=tk.X, pady=(0, Spacing.SM))
+
+        tk.Label(
+            filter_frame,
+            text="Filter:",
+            font=Fonts.BODY,
+            fg=Colors.TEXT_MUTED,
+            bg=Colors.BG_PRIMARY,
+        ).pack(side=tk.LEFT, padx=(0, Spacing.SM))
+
+        self._filter_var = tk.StringVar()
+        self._filter_var.trace_add("write", lambda *_: self._apply_filter())
+        self._filter_entry = tk.Entry(
+            filter_frame,
+            textvariable=self._filter_var,
+            font=Fonts.BODY,
+            bg=Colors.BG_SECONDARY,
+            fg=Colors.TEXT_PRIMARY,
+            insertbackground=Colors.TEXT_PRIMARY,
+            relief=tk.FLAT,
+            width=20,
+        )
+        self._filter_entry.pack(side=tk.LEFT, padx=(0, Spacing.SM))
+
+        tk.Label(
+            filter_frame,
+            text="(search by ticker or name)",
+            font=Fonts.CAPTION,
+            fg=Colors.TEXT_MUTED,
+            bg=Colors.BG_PRIMARY,
+        ).pack(side=tk.LEFT)
 
         # Trade queue table in card
         table_card = Card(self, title="Pending Trades")
@@ -299,7 +334,26 @@ class HarvestQueueScreen(BaseScreen):
         # Update total savings
         self.total_savings_label.configure(text=f"Potential Savings: ${total_benefit:,.2f}")
 
-        self.table.set_data(table_data)
+        # Store unfiltered data and apply any active filter
+        self._all_table_data = table_data
+        self._apply_filter()
+
+    def _apply_filter(self) -> None:
+        """Apply the current filter to table data."""
+        filter_text = self._filter_var.get().strip().lower()
+
+        if not filter_text:
+            # No filter, show all data
+            self.table.set_data(self._all_table_data)
+            return
+
+        # Filter by ticker or name
+        filtered = [
+            row for row in self._all_table_data
+            if filter_text in row.get("ticker", "").lower()
+            or filter_text in row.get("name", "").lower()
+        ]
+        self.table.set_data(filtered)
 
     def _on_select(self, row: dict[str, Any]) -> None:
         """Handle row selection."""
