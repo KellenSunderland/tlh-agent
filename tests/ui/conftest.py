@@ -4,10 +4,12 @@ import contextlib
 import os
 import tkinter as tk
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
 from tlh_agent.app import TLHAgentApp
+from tlh_agent.services import ServiceProvider
 from tlh_agent.ui.main_window import MainWindow
 
 # Directory for screenshots
@@ -26,6 +28,7 @@ def app(request):
     """Create a TLH Agent app instance for testing.
 
     The app is automatically destroyed after the test.
+    Uses mock mode (no Alpaca connection) to ensure mock data is used.
     """
     # Skip if no display available (CI environment)
     if os.environ.get("DISPLAY") is None and os.name != "nt":
@@ -35,13 +38,22 @@ def app(request):
         if platform.system() != "Darwin":
             pytest.skip("No display available")
 
-    app_instance = TLHAgentApp()
+    # Patch ServiceProvider.create to use mock mode (no Alpaca connection)
+    # This ensures screens fall back to MockDataFactory
+    original_create = ServiceProvider.create
 
-    yield app_instance
+    def mock_create(config_dir=None, connect_alpaca=True):
+        # Always disable Alpaca connection for UI tests
+        return original_create(config_dir=config_dir, connect_alpaca=False)
 
-    # Cleanup
-    with contextlib.suppress(tk.TclError):
-        app_instance.root.destroy()
+    with patch.object(ServiceProvider, "create", mock_create):
+        app_instance = TLHAgentApp()
+
+        yield app_instance
+
+        # Cleanup
+        with contextlib.suppress(tk.TclError):
+            app_instance.root.destroy()
 
 
 @pytest.fixture
