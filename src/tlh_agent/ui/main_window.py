@@ -132,7 +132,11 @@ class MainWindow(ttk.Frame):
         }
 
         for name, screen_class in screen_classes.items():
-            screen = screen_class(self.content_frame)
+            # Pass trade_queue to HarvestQueueScreen
+            if name == "harvest":
+                screen = screen_class(self.content_frame, trade_queue=self._trade_queue)
+            else:
+                screen = screen_class(self.content_frame)
             self._screens[name] = screen
 
     def _on_navigate(self, screen_name: str) -> None:
@@ -158,12 +162,15 @@ class MainWindow(ttk.Frame):
 
         # Show new screen with comfortable padding
         if screen_name in self._screens:
-            self._screens[screen_name].pack(
+            screen = self._screens[screen_name]
+            screen.pack(
                 fill=tk.BOTH,
                 expand=True,
                 padx=Theme.spacing.XL,
                 pady=Theme.spacing.LG,
             )
+            # Refresh screen data when shown
+            screen.refresh()
             self._current_screen = screen_name
             self.sidebar.set_active(screen_name)
 
@@ -266,9 +273,12 @@ class MainWindow(ttk.Frame):
         # Disable input while processing
         self.assistant_pane.set_enabled(False)
 
+        # Show thinking indicator
+        self.assistant_pane.show_thinking("Thinking...")
+
         # Start streaming message
         self._streaming_text = ""
-        self.assistant_pane.start_streaming_message("")
+        self._first_text_received = False
 
         # Send message to Claude
         self._assistant_controller.send_message(message)
@@ -279,6 +289,12 @@ class MainWindow(ttk.Frame):
         Args:
             text: Text chunk from Claude.
         """
+        # On first text, hide thinking and start streaming message
+        if not self._first_text_received:
+            self._first_text_received = True
+            self.after(0, lambda: self.assistant_pane.hide_thinking())
+            self.after(0, lambda: self.assistant_pane.start_streaming_message(""))
+
         self._streaming_text += text
         # Update UI from main thread
         self.after(0, lambda: self.assistant_pane.update_streaming_message(
@@ -291,8 +307,9 @@ class MainWindow(ttk.Frame):
         Args:
             tool_name: Name of the tool being used.
         """
-        # Add tool use indicator
-        self.after(0, lambda: self.assistant_pane.add_tool_use(tool_name))
+        # Show tool use in thinking indicator
+        display_name = tool_name.replace("_", " ").title()
+        self.after(0, lambda: self.assistant_pane.show_thinking(f"Using {display_name}..."))
 
     def _on_assistant_tool_done(self, tool_name: str, success: bool) -> None:
         """Handle tool execution completion.
@@ -308,6 +325,7 @@ class MainWindow(ttk.Frame):
     def _on_assistant_done(self) -> None:
         """Handle assistant response completion."""
         def _finish():
+            self.assistant_pane.hide_thinking()
             self.assistant_pane.finish_streaming_message()
             self.assistant_pane.set_enabled(True)
 

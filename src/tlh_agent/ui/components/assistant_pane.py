@@ -351,3 +351,48 @@ class AssistantPane(tk.Frame):
         state = tk.NORMAL if enabled else tk.DISABLED
         self.input_entry.configure(state=state)
         self.send_btn.configure(state=state)
+
+    def show_thinking(self, text: str = "Thinking...") -> None:
+        """Show a thinking indicator.
+
+        Args:
+            text: Text to show (e.g., "Thinking..." or "Using get_positions...").
+        """
+        self.hide_thinking()  # Remove any existing indicator
+        self._thinking_frame = tk.Frame(self.messages_frame, bg=Colors.BG_PRIMARY)
+        self._thinking_frame.pack(fill=tk.X, padx=Spacing.SM, pady=Spacing.XS)
+
+        indicator = tk.Frame(
+            self._thinking_frame,
+            bg=Colors.BG_TERTIARY,
+            padx=Spacing.SM,
+            pady=Spacing.XS,
+        )
+        indicator.pack(side=tk.LEFT)
+
+        self._thinking_label = tk.Label(
+            indicator,
+            text=f"⏳ {text}",
+            font=Fonts.CAPTION,
+            fg=Colors.TEXT_MUTED,
+            bg=Colors.BG_TERTIARY,
+        )
+        self._thinking_label.pack()
+        self._scroll_to_bottom()
+
+    def update_thinking(self, text: str) -> None:
+        """Update the thinking indicator text.
+
+        Args:
+            text: New text to show.
+        """
+        if hasattr(self, "_thinking_label") and self._thinking_label:
+            self._thinking_label.configure(text=f"⏳ {text}")
+            self._scroll_to_bottom()
+
+    def hide_thinking(self) -> None:
+        """Hide the thinking indicator."""
+        if hasattr(self, "_thinking_frame") and self._thinking_frame:
+            self._thinking_frame.destroy()
+            self._thinking_frame = None
+            self._thinking_label = None

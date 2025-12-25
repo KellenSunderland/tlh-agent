@@ -13,6 +13,7 @@ from typing import Any
 from tlh_agent.data.mock_data import HarvestOpportunity, MockDataFactory
 from tlh_agent.services import get_provider
 from tlh_agent.services.scanner import HarvestOpportunity as LiveHarvestOpportunity
+from tlh_agent.services.trade_queue import QueuedTrade, TradeQueueService
 from tlh_agent.ui.base import BaseScreen
 from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.data_table import ColumnDef, DataTable
@@ -22,6 +23,20 @@ from tlh_agent.ui.theme import Colors, Fonts, Spacing
 
 class HarvestQueueScreen(BaseScreen):
     """Screen for reviewing and acting on pending trades from all sources."""
+
+    def __init__(
+        self,
+        parent: tk.Widget,
+        trade_queue: TradeQueueService | None = None,
+    ) -> None:
+        """Initialize the screen.
+
+        Args:
+            parent: The parent widget.
+            trade_queue: Optional trade queue service for assistant-added trades.
+        """
+        self._trade_queue = trade_queue
+        super().__init__(parent)
 
     def _setup_ui(self) -> None:
         """Set up the trade queue layout."""
@@ -199,16 +214,71 @@ class HarvestQueueScreen(BaseScreen):
     def refresh(self) -> None:
         """Refresh harvest queue data."""
         provider = get_provider()
+        table_data = []
 
+        # Get harvest opportunities from scanner
         if provider.is_live and provider.scanner:
             scan_result = provider.scanner.scan()
             opportunities = scan_result.opportunities
         else:
             opportunities = MockDataFactory.get_harvest_opportunities()
 
-        # Update summary
+        # Add harvest opportunities to table
+        for opp in opportunities:
+            status_display = opp.status.title()
+            tag = ""
+            if opp.status == "approved":
+                tag = "gain"
+            elif opp.status in ("rejected", "expired"):
+                tag = "muted"
+
+            amount = opp.shares * opp.current_price
+
+            table_data.append(
+                {
+                    "trade_type": "Harvest",
+                    "status": status_display,
+                    "ticker": opp.ticker,
+                    "name": opp.name,
+                    "action": "Sell",
+                    "shares": f"{opp.shares:,.2f}",
+                    "amount": f"${amount:,.2f}",
+                    "tax_benefit": f"${opp.estimated_tax_benefit:,.2f}",
+                    "tag": tag,
+                    "_opportunity": opp,
+                }
+            )
+
+        # Get trades from trade queue service (added by assistant)
+        if self._trade_queue:
+            queued_trades = self._trade_queue.get_pending_trades()
+            for trade in queued_trades:
+                type_display = trade.trade_type.value.replace("_", " ").title()
+                status_display = trade.status.value.title()
+                tag = ""
+                if trade.status.value == "approved":
+                    tag = "gain"
+
+                table_data.append(
+                    {
+                        "trade_type": type_display,
+                        "status": status_display,
+                        "ticker": trade.symbol,
+                        "name": trade.name,
+                        "action": trade.action.value.title(),
+                        "shares": f"{trade.shares:,.2f}",
+                        "amount": f"${trade.notional:,.2f}",
+                        "tax_benefit": "-",
+                        "tag": tag,
+                        "_queued_trade": trade,
+                    }
+                )
+
+        # Update summary counts
         pending_count = sum(1 for o in opportunities if o.status == "pending")
         approved_count = sum(1 for o in opportunities if o.status == "approved")
+        if self._trade_queue:
+            pending_count += len(self._trade_queue.get_pending_trades())
         active_statuses = ("pending", "approved")
         total_loss = sum(o.unrealized_loss for o in opportunities if o.status in active_statuses)
         total_benefit = sum(
@@ -228,34 +298,6 @@ class HarvestQueueScreen(BaseScreen):
 
         # Update total savings
         self.total_savings_label.configure(text=f"Potential Savings: ${total_benefit:,.2f}")
-
-        # Build table data
-        table_data = []
-        for opp in opportunities:
-            status_display = opp.status.title()
-            tag = ""
-            if opp.status == "approved":
-                tag = "gain"
-            elif opp.status in ("rejected", "expired"):
-                tag = "muted"
-
-            # Calculate amount (market value)
-            amount = opp.shares * opp.current_price
-
-            table_data.append(
-                {
-                    "trade_type": "Harvest",
-                    "status": status_display,
-                    "ticker": opp.ticker,
-                    "name": opp.name,
-                    "action": "Sell",
-                    "shares": f"{opp.shares:,.2f}",
-                    "amount": f"${amount:,.2f}",
-                    "tax_benefit": f"${opp.estimated_tax_benefit:,.2f}",
-                    "tag": tag,
-                    "_opportunity": opp,
-                }
-            )
 
         self.table.set_data(table_data)
 

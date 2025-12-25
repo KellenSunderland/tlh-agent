@@ -141,15 +141,15 @@ class ClaudeToolProvider:
             ToolDefinition(
                 name=ToolName.GET_INDEX_ALLOCATION.value,
                 description=(
-                    "Compare current portfolio allocation to S&P 500 target weights. "
-                    "Shows which positions are overweight or underweight."
+                    "Get S&P 500 target allocations for direct indexing. "
+                    "Returns all 503 stocks with target weights for buying."
                 ),
                 input_schema={
                     "type": "object",
                     "properties": {
                         "top_n": {
                             "type": "integer",
-                            "description": "Number of top deviations to show. Defaults to 20.",
+                            "description": "Number of stocks to return. Defaults to 503 (all S&P 500).",
                         },
                     },
                     "required": [],
@@ -230,7 +230,7 @@ class ClaudeToolProvider:
                 )
             elif tool_name == ToolName.GET_INDEX_ALLOCATION.value:
                 return self._get_index_allocation(
-                    top_n=arguments.get("top_n", 20),
+                    top_n=arguments.get("top_n", 503),
                 )
             elif tool_name == ToolName.GET_REBALANCE_PLAN.value:
                 return self._get_rebalance_plan(
@@ -381,7 +381,7 @@ class ClaudeToolProvider:
         except Exception as e:
             return ToolResult(success=False, data={}, error=str(e))
 
-    def _get_index_allocation(self, top_n: int = 20) -> ToolResult:
+    def _get_index_allocation(self, top_n: int = 503) -> ToolResult:
         """Get index allocation comparison."""
         if not self._index_service or not self._portfolio_service:
             return ToolResult(
