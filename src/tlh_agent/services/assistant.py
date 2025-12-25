@@ -6,10 +6,13 @@ Connects the UI to ClaudeService and handles tool execution.
 import asyncio
 import logging
 import threading
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+import anthropic
 
 from tlh_agent.services.claude import ClaudeService, StreamEvent
 from tlh_agent.services.claude_tools import ClaudeToolProvider
@@ -143,20 +146,43 @@ class AssistantController:
         logger.info("=== RUN_ASYNC START ===")
         self._loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self._loop)
-        try:
-            logger.debug("Running _process_message in event loop...")
-            self._loop.run_until_complete(self._process_message(message))
-            logger.info("=== RUN_ASYNC COMPLETE (success) ===")
-        except Exception as e:
-            logger.exception(f"Error processing message: {e}")
-            self._safe_callback(self._on_error, str(e))
-        finally:
-            logger.debug("Closing event loop...")
-            self._loop.close()
-            self._update_state(is_processing=False, current_tool=None)
-            logger.debug("Calling on_done callback...")
-            self._safe_callback(self._on_done)
-            logger.info("=== RUN_ASYNC FINALLY COMPLETE ===")
+
+        max_retries = 3
+        base_delay = 30  # seconds
+
+        for attempt in range(max_retries + 1):
+            try:
+                logger.debug(f"Running _process_message in event loop (attempt {attempt + 1})...")
+                self._loop.run_until_complete(self._process_message(message))
+                logger.info("=== RUN_ASYNC COMPLETE (success) ===")
+                break  # Success, exit retry loop
+            except anthropic.RateLimitError:
+                if attempt < max_retries:
+                    delay = base_delay * (2 ** attempt)  # Exponential backoff
+                    logger.warning(f"Rate limit hit, waiting {delay}s before retry...")
+                    self._safe_callback(
+                        self._on_text,
+                        f"\n\n⏳ Rate limit reached. Waiting {delay} seconds before retrying...\n"
+                    )
+                    time.sleep(delay)
+                    self._safe_callback(self._on_text, "Retrying...\n")
+                else:
+                    logger.error(f"Rate limit exceeded after {max_retries} retries")
+                    self._safe_callback(
+                        self._on_error,
+                        "Rate limit exceeded. Please wait a minute and try again."
+                    )
+            except Exception as e:
+                logger.exception(f"Error processing message: {e}")
+                self._safe_callback(self._on_error, str(e))
+                break  # Don't retry non-rate-limit errors
+
+        logger.debug("Closing event loop...")
+        self._loop.close()
+        self._update_state(is_processing=False, current_tool=None)
+        logger.debug("Calling on_done callback...")
+        self._safe_callback(self._on_done)
+        logger.info("=== RUN_ASYNC FINALLY COMPLETE ===")
 
     async def _process_message(self, message: str) -> None:
         """Process a message with tool execution loop.

@@ -7,7 +7,6 @@ and trade recommendations.
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
 import anthropic
@@ -20,19 +19,9 @@ from anthropic.types import (
     ToolUseBlockParam,
 )
 
-# Set up dedicated log file for agent debugging (same as assistant.py)
-LOG_FILE = Path.home() / ".tlh-agent" / "agent.log"
-LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-
-file_handler = logging.FileHandler(LOG_FILE, mode='a')
-file_handler.setLevel(logging.DEBUG)
-file_handler.setFormatter(logging.Formatter(
-    '%(asctime)s | %(levelname)s | %(name)s | %(message)s'
-))
-
+# Logger is configured by assistant.py which adds the file handler
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-logger.addHandler(file_handler)
 
 
 @dataclass
@@ -93,6 +82,8 @@ AVAILABLE TOOLS:
 - get_trade_queue: View pending trades in the queue (can filter by symbol)
 - buy_index: Buy ALL stocks in an index - pass investment_amount and optional index name
 - propose_trades: Add individual trades to the queue (for harvest/rebalance, NOT index buys)
+- clear_trade_queue: Clear/cancel all pending trades from the queue
+- remove_trade: Remove trades for a specific symbol from the queue
 
 SUPPORTED INDEXES (for buy_index):
 - sp500: S&P 500 (500 large-cap stocks) - FULLY IMPLEMENTED

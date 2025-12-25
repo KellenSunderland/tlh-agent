@@ -284,10 +284,11 @@ class TestIndexServiceFetch:
     def test_fetch_from_spy_xlsx(self, service: IndexService) -> None:
         """Test fetching from SPY XLSX with mocked pandas."""
         sectors = ["Information Technology"] * 3
+        # Weights in data are already percentages (7.0 means 7%, 0.85 means 0.85%)
         mock_df = pd.DataFrame({
             "Ticker": ["AAPL", "MSFT", "NVDA"],
             "Name": ["Apple Inc.", "Microsoft Corp", "NVIDIA Corp"],
-            "Weight": [0.07, 0.065, 0.06],  # Fractions
+            "Weight": [7.0, 6.5, 6.0],
             "Sector": sectors,
         })
 
@@ -297,23 +298,33 @@ class TestIndexServiceFetch:
         assert len(constituents) == 3
         assert constituents[0].symbol == "AAPL"
         assert constituents[0].name == "Apple Inc."
-        assert constituents[0].weight == Decimal("7.0000")  # Converted from 0.07
+        assert constituents[0].weight == Decimal("7.0000")
         assert constituents[0].sector == "Information Technology"
 
-    def test_fetch_from_spy_xlsx_percentage_weights(self, service: IndexService) -> None:
-        """Test fetching when weights are already percentages."""
+    def test_fetch_from_spy_xlsx_small_weight_stocks(self, service: IndexService) -> None:
+        """Test that small weight stocks (< 1%) are parsed correctly."""
+        # XOM has 0.85% weight, not 85%
         mock_df = pd.DataFrame({
-            "Ticker": ["AAPL", "MSFT"],
-            "Name": ["Apple Inc.", "Microsoft Corp"],
-            "Weight": [7.0, 6.5],  # Already percentages
-            "Sector": ["Technology", "Technology"],
+            "Ticker": ["NVDA", "XOM", "JNJ"],
+            "Name": ["NVIDIA Corp", "Exxon Mobil", "Johnson & Johnson"],
+            "Weight": [7.8, 0.85, 0.84],  # 7.8%, 0.85%, 0.84%
+            "Sector": ["Technology", "Energy", "Healthcare"],
         })
 
         with patch("pandas.read_excel", return_value=mock_df):
             constituents = service._fetch_from_spy_xlsx()
 
-        assert constituents[0].weight == Decimal("7.0000")
-        assert constituents[1].weight == Decimal("6.5000")
+        assert len(constituents) == 3
+        # NVDA should be 7.8%, not modified
+        assert constituents[0].weight == Decimal("7.8000")
+        # XOM should be 0.85%, NOT 85%
+        assert constituents[1].weight == Decimal("0.8500")
+        # JNJ should be 0.84%, NOT 84%
+        assert constituents[2].weight == Decimal("0.8400")
+
+        # Verify weights sum correctly (not 93%+ which would indicate bug)
+        total = sum(c.weight for c in constituents)
+        assert total < Decimal("10")  # Should be ~9.49%, not 93%
 
     def test_fetch_from_slickcharts(self, service: IndexService) -> None:
         """Test fetching from Slickcharts fallback."""

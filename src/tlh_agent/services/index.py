@@ -224,10 +224,8 @@ class IndexService:
             if pd.isna(weight):
                 continue
 
-            # Convert weight to percentage if needed
+            # Weight is already in percentage form (7.8 means 7.8%, 0.85 means 0.85%)
             weight_pct = float(weight)
-            if weight_pct < 1:  # Appears to be a fraction (0.07 instead of 7%)
-                weight_pct *= 100
 
             name = str(row[name_col]).strip() if name_col else ticker
             sector_val = row.get(sector_col) if sector_col else None

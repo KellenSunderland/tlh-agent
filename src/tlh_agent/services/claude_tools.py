@@ -36,6 +36,8 @@ class ToolName(Enum):
     GET_TRADE_QUEUE = "get_trade_queue"
     PROPOSE_TRADES = "propose_trades"
     BUY_INDEX = "buy_index"
+    CLEAR_TRADE_QUEUE = "clear_trade_queue"
+    REMOVE_TRADE = "remove_trade"
 
 
 @dataclass
@@ -249,6 +251,34 @@ class ClaudeToolProvider:
                     "required": ["investment_amount"],
                 },
             ),
+            ToolDefinition(
+                name=ToolName.CLEAR_TRADE_QUEUE.value,
+                description=(
+                    "Clear all pending trades from the trade queue. "
+                    "Use this when the user wants to cancel all pending trades or start fresh."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {},
+                },
+            ),
+            ToolDefinition(
+                name=ToolName.REMOVE_TRADE.value,
+                description=(
+                    "Remove specific trades from the queue by symbol. "
+                    "Use this to cancel trades for a specific stock."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "symbol": {
+                            "type": "string",
+                            "description": "Stock symbol to remove (e.g., 'AAPL').",
+                        },
+                    },
+                    "required": ["symbol"],
+                },
+            ),
         ]
 
     def execute_tool(self, tool_name: str, arguments: dict) -> ToolResult:
@@ -295,6 +325,10 @@ class ClaudeToolProvider:
                     investment_amount=Decimal(str(arguments.get("investment_amount", 0))),
                     index_name=arguments.get("index", "sp500"),
                 )
+            elif tool_name == ToolName.CLEAR_TRADE_QUEUE.value:
+                return self._clear_trade_queue()
+            elif tool_name == ToolName.REMOVE_TRADE.value:
+                return self._remove_trade(symbol=arguments.get("symbol", ""))
             else:
                 return ToolResult(success=False, data={}, error=f"Unknown tool: {tool_name}")
         except Exception as e:
@@ -708,4 +742,84 @@ class ClaudeToolProvider:
             )
         except Exception as e:
             logger.exception("Error in buy_index")
+            return ToolResult(success=False, data={}, error=str(e))
+
+    def _clear_trade_queue(self) -> ToolResult:
+        """Clear all trades from the queue.
+
+        Returns:
+            ToolResult with count of cleared trades.
+        """
+        if not self._trade_queue:
+            return ToolResult(
+                success=False,
+                data={},
+                error="Trade queue service not available",
+            )
+
+        try:
+            count = len(self._trade_queue.get_all_trades())
+            self._trade_queue.clear_queue()
+            return ToolResult(
+                success=True,
+                data={
+                    "trades_cleared": count,
+                    "message": f"Cleared {count} trades from queue.",
+                },
+            )
+        except Exception as e:
+            logger.exception("Error in clear_trade_queue")
+            return ToolResult(success=False, data={}, error=str(e))
+
+    def _remove_trade(self, symbol: str) -> ToolResult:
+        """Remove trades for a specific symbol from the queue.
+
+        Args:
+            symbol: Stock symbol to remove.
+
+        Returns:
+            ToolResult with count of removed trades.
+        """
+        if not self._trade_queue:
+            return ToolResult(
+                success=False,
+                data={},
+                error="Trade queue service not available",
+            )
+
+        if not symbol:
+            return ToolResult(
+                success=False,
+                data={},
+                error="Symbol is required",
+            )
+
+        try:
+            symbol_upper = symbol.upper()
+            trades = self._trade_queue.get_all_trades()
+            removed = 0
+
+            for trade in trades:
+                if trade.symbol == symbol_upper:
+                    self._trade_queue.remove_trade(trade.id)
+                    removed += 1
+
+            if removed == 0:
+                return ToolResult(
+                    success=True,
+                    data={
+                        "trades_removed": 0,
+                        "message": f"No trades found for {symbol_upper}.",
+                    },
+                )
+
+            return ToolResult(
+                success=True,
+                data={
+                    "trades_removed": removed,
+                    "message": f"Removed {removed} trade(s) for {symbol_upper}.",
+                },
+            )
+        except Exception as e:
+            logger.exception("Error in remove_trade")
             return ToolResult(success=False, data={}, error=str(e))

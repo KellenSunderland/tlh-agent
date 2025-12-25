@@ -153,7 +153,7 @@ class TestClaudeToolProvider:
         """Test getting tool definitions."""
         definitions = provider.get_tool_definitions()
 
-        assert len(definitions) == 8
+        assert len(definitions) == 10
         names = [d.name for d in definitions]
         assert ToolName.GET_PORTFOLIO_SUMMARY.value in names
         assert ToolName.GET_POSITIONS.value in names
@@ -163,6 +163,8 @@ class TestClaudeToolProvider:
         assert ToolName.GET_TRADE_QUEUE.value in names
         assert ToolName.PROPOSE_TRADES.value in names
         assert ToolName.BUY_INDEX.value in names
+        assert ToolName.CLEAR_TRADE_QUEUE.value in names
+        assert ToolName.REMOVE_TRADE.value in names
 
     def test_get_portfolio_summary(
         self,
@@ -386,3 +388,152 @@ class TestClaudeToolProvider:
 
         assert result.success is False
         assert "Unknown tool" in result.error
+
+
+class TestBuyIndex:
+    """Tests for buy_index tool - critical for correct allocation calculations."""
+
+    @pytest.fixture
+    def mock_index_service(self) -> MagicMock:
+        """Create mock index service with realistic S&P 500 weights."""
+        service = MagicMock(spec=IndexService)
+        # Realistic top 10 S&P 500 weights (as of late 2024)
+        service.get_constituents.return_value = [
+            IndexConstituent(
+                symbol="NVDA", name="NVIDIA Corp", weight=Decimal("7.80"), sector="Tech"
+            ),
+            IndexConstituent(
+                symbol="AAPL", name="Apple Inc.", weight=Decimal("6.82"), sector="Tech"
+            ),
+            IndexConstituent(
+                symbol="MSFT", name="Microsoft Corp", weight=Decimal("6.14"), sector="Tech"
+            ),
+            IndexConstituent(
+                symbol="AMZN", name="Amazon.com Inc", weight=Decimal("3.83"), sector="Tech"
+            ),
+            # Small weight stocks - critical to test these are NOT inflated
+            IndexConstituent(
+                symbol="XOM", name="Exxon Mobil Corp", weight=Decimal("0.85"), sector="Energy"
+            ),
+            IndexConstituent(
+                symbol="JNJ", name="Johnson & Johnson", weight=Decimal("0.84"), sector="Health"
+            ),
+        ]
+        return service
+
+    def test_buy_index_calculates_correct_amounts(
+        self, mock_index_service: MagicMock
+    ) -> None:
+        """Test that buy_index allocates money proportionally to weights."""
+        trade_queue = TradeQueueService()
+        provider = ClaudeToolProvider(
+            index_service=mock_index_service,
+            trade_queue=trade_queue,
+        )
+
+        # Invest $50,000
+        result = provider.execute_tool(
+            ToolName.BUY_INDEX.value,
+            {"investment_amount": 50000, "index_name": "sp500"},
+        )
+
+        assert result.success is True
+
+        trades = trade_queue.get_all_trades()
+        assert len(trades) == 6
+
+        # Get trades by symbol
+        trades_by_symbol = {t.symbol: t for t in trades}
+
+        # NVDA should get ~7.80% of $50,000 = $3,900
+        nvda_trade = trades_by_symbol["NVDA"]
+        assert nvda_trade.notional == Decimal("3900.00")
+
+        # AAPL should get ~6.82% of $50,000 = $3,410
+        aapl_trade = trades_by_symbol["AAPL"]
+        assert aapl_trade.notional == Decimal("3410.00")
+
+        # XOM should get ~0.85% of $50,000 = $425, NOT $42,500!
+        xom_trade = trades_by_symbol["XOM"]
+        assert xom_trade.notional == Decimal("425.00")
+        # Critical: XOM must be less than NVDA (bug was XOM at 85% instead of 0.85%)
+        assert xom_trade.notional < nvda_trade.notional
+
+        # JNJ should get ~0.84% of $50,000 = $420
+        jnj_trade = trades_by_symbol["JNJ"]
+        assert jnj_trade.notional == Decimal("420.00")
+
+    def test_buy_index_weights_sum_correctly(
+        self, mock_index_service: MagicMock
+    ) -> None:
+        """Test that total allocated roughly equals investment amount."""
+        trade_queue = TradeQueueService()
+        provider = ClaudeToolProvider(
+            index_service=mock_index_service,
+            trade_queue=trade_queue,
+        )
+
+        investment = 100000
+        result = provider.execute_tool(
+            ToolName.BUY_INDEX.value,
+            {"investment_amount": investment, "index_name": "sp500"},
+        )
+
+        assert result.success is True
+
+        trades = trade_queue.get_all_trades()
+        total_allocated = sum(t.notional for t in trades)
+
+        # Total weights in mock = 7.80 + 6.82 + 6.14 + 3.83 + 0.85 + 0.84 = 26.28%
+        # Expected allocation = $100,000 * 26.28% = $26,280
+        expected = Decimal(investment) * Decimal("26.28") / 100
+        assert total_allocated == expected.quantize(Decimal("0.01"))
+
+    def test_buy_index_small_weights_not_inflated(
+        self, mock_index_service: MagicMock
+    ) -> None:
+        """Regression test: weights < 1% must not be multiplied by 100."""
+        trade_queue = TradeQueueService()
+        provider = ClaudeToolProvider(
+            index_service=mock_index_service,
+            trade_queue=trade_queue,
+        )
+
+        result = provider.execute_tool(
+            ToolName.BUY_INDEX.value,
+            {"investment_amount": 50000, "index_name": "sp500"},
+        )
+
+        assert result.success is True
+
+        trades = trade_queue.get_all_trades()
+        trades_by_symbol = {t.symbol: t for t in trades}
+
+        # XOM at 0.85% should get $425, not $42,500 (which would be 85%)
+        xom = trades_by_symbol["XOM"]
+        assert xom.notional < Decimal("1000"), f"XOM notional {xom.notional} is way too high!"
+
+        # JNJ at 0.84% should get $420, not $42,000 (which would be 84%)
+        jnj = trades_by_symbol["JNJ"]
+        assert jnj.notional < Decimal("1000"), f"JNJ notional {jnj.notional} is way too high!"
+
+        # The sum of small-weight stocks should be < 1% of investment
+        small_weight_total = xom.notional + jnj.notional
+        assert small_weight_total < Decimal("1000")
+
+    def test_buy_index_unsupported_index(self) -> None:
+        """Test that unsupported indexes return error."""
+        trade_queue = TradeQueueService()
+        mock_index = MagicMock(spec=IndexService)
+        provider = ClaudeToolProvider(
+            index_service=mock_index,
+            trade_queue=trade_queue,
+        )
+
+        result = provider.execute_tool(
+            ToolName.BUY_INDEX.value,
+            {"investment_amount": 50000, "index": "nasdaq100"},  # API uses "index" not "index_name"
+        )
+
+        assert result.success is False
+        assert "not yet implemented" in result.error.lower()

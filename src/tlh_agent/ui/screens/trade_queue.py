@@ -37,7 +37,10 @@ class TradeQueueScreen(BaseScreen):
         """
         self._trade_queue = trade_queue
         self._all_table_data: list[dict] = []  # Unfiltered data
+        self._last_trade_count = 0  # Track trade count for auto-refresh
+        self._refresh_job: str | None = None
         super().__init__(parent)
+        self._schedule_auto_refresh()
 
     def _setup_ui(self) -> None:
         """Set up the trade queue layout."""
@@ -62,6 +65,7 @@ class TradeQueueScreen(BaseScreen):
         summary_content = summary_card.content
         self.summary_labels: dict[str, tk.Label] = {}
         for key, label in [
+            ("total", "Total Trades"),
             ("pending", "Pending"),
             ("approved", "Approved"),
             ("total_loss", "Total Loss"),
@@ -310,6 +314,7 @@ class TradeQueueScreen(BaseScreen):
                 )
 
         # Update summary counts
+        total_count = len(table_data)
         pending_count = sum(1 for o in opportunities if o.status == "pending")
         approved_count = sum(1 for o in opportunities if o.status == "approved")
         if self._trade_queue:
@@ -320,6 +325,7 @@ class TradeQueueScreen(BaseScreen):
             o.estimated_tax_benefit for o in opportunities if o.status in active_statuses
         )
 
+        self.summary_labels["total"].configure(text=str(total_count))
         self.summary_labels["pending"].configure(text=str(pending_count))
         self.summary_labels["approved"].configure(text=str(approved_count))
         self.summary_labels["total_loss"].configure(
@@ -354,6 +360,28 @@ class TradeQueueScreen(BaseScreen):
             or filter_text in row.get("name", "").lower()
         ]
         self.table.set_data(filtered)
+
+    def _schedule_auto_refresh(self) -> None:
+        """Schedule periodic check for new trades."""
+        self._check_for_updates()
+        # Check every 2 seconds
+        self._refresh_job = self.after(2000, self._schedule_auto_refresh)
+
+    def destroy(self) -> None:
+        """Clean up when widget is destroyed."""
+        if self._refresh_job:
+            self.after_cancel(self._refresh_job)
+        super().destroy()
+
+    def _check_for_updates(self) -> None:
+        """Check if trade count changed and refresh if needed."""
+        if not self._trade_queue:
+            return
+
+        current_count = len(self._trade_queue.get_all_trades())
+        if current_count != self._last_trade_count:
+            self._last_trade_count = current_count
+            self.refresh()
 
     def _on_select(self, row: dict[str, Any]) -> None:
         """Handle row selection."""
@@ -428,53 +456,92 @@ class TradeQueueScreen(BaseScreen):
         ).pack(side=tk.LEFT)
 
     def _on_approve(self) -> None:
-        """Approve selected opportunity."""
+        """Approve selected trade (harvest opportunity or queued trade)."""
         selected = self.table.get_selected()
-        if selected:
-            opp = selected.get("_opportunity")
-            if opp and hasattr(opp, "id"):
-                provider = get_provider()
-                if provider.scanner:
-                    provider.scanner.approve_harvest(opp.id)
-                    self.refresh()
+        if not selected:
+            return
+
+        # Handle harvest opportunities
+        opp = selected.get("_opportunity")
+        if opp and hasattr(opp, "id"):
+            provider = get_provider()
+            if provider.scanner:
+                provider.scanner.approve_harvest(opp.id)
+                self.refresh()
+                return
+
+        # Handle queued trades
+        queued = selected.get("_queued_trade")
+        if queued and self._trade_queue:
+            self._trade_queue.approve_trade(queued.id)
+            self.refresh()
 
     def _on_reject(self) -> None:
-        """Reject selected opportunity."""
+        """Reject/remove selected trade."""
         selected = self.table.get_selected()
-        if selected:
-            opp = selected.get("_opportunity")
-            if opp and hasattr(opp, "id"):
-                provider = get_provider()
-                if provider.scanner:
-                    provider.scanner.reject_harvest(opp.id)
-                    self.refresh()
+        if not selected:
+            return
+
+        # Handle harvest opportunities
+        opp = selected.get("_opportunity")
+        if opp and hasattr(opp, "id"):
+            provider = get_provider()
+            if provider.scanner:
+                provider.scanner.reject_harvest(opp.id)
+                self.refresh()
+                return
+
+        # Handle queued trades - remove from queue
+        queued = selected.get("_queued_trade")
+        if queued and self._trade_queue:
+            self._trade_queue.remove_trade(queued.id)
+            self.refresh()
 
     def _on_approve_all(self) -> None:
-        """Approve all pending opportunities."""
+        """Approve all pending trades."""
         provider = get_provider()
+
+        # Approve harvest opportunities
         if provider.scanner:
             scan_result = provider.scanner.scan()
             for opp in scan_result.opportunities:
                 if opp.status == "pending":
                     provider.scanner.approve_harvest(opp.id)
-            self.refresh()
+
+        # Approve queued trades
+        if self._trade_queue:
+            self._trade_queue.approve_all()
+
+        self.refresh()
 
     def _on_reject_all(self) -> None:
-        """Reject all pending opportunities."""
+        """Reject/clear all pending trades."""
         provider = get_provider()
+
+        # Reject harvest opportunities
         if provider.scanner:
             scan_result = provider.scanner.scan()
             for opp in scan_result.opportunities:
                 if opp.status == "pending":
                     provider.scanner.reject_harvest(opp.id)
-            self.refresh()
+
+        # Clear all queued trades
+        if self._trade_queue:
+            self._trade_queue.clear_queue()
+
+        self.refresh()
 
     def _on_execute(self) -> None:
-        """Execute all approved harvests."""
+        """Execute all approved trades."""
         provider = get_provider()
+
+        # Execute approved harvests
         if provider.execution and provider.scanner:
             scan_result = provider.scanner.scan()
             for opp in scan_result.opportunities:
                 if opp.status == "approved":
                     provider.execution.execute_harvest(opp)
-            self.refresh()
+
+        # TODO: Execute approved queued trades via broker
+
+        self.refresh()

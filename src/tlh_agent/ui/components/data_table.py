@@ -134,7 +134,7 @@ class DataTable(ttk.Frame):
         display_data = self._data.copy()
         if self._sort_column:
             display_data.sort(
-                key=lambda row: row.get(self._sort_column, ""),
+                key=lambda row: self._sort_key(row.get(self._sort_column, "")),
                 reverse=not self._sort_ascending,
             )
 
@@ -168,6 +168,31 @@ class DataTable(ttk.Frame):
             if col.key == self._sort_column:
                 indicator = " ▲" if self._sort_ascending else " ▼"
             self._tree.heading(col.key, text=f"{col.header}{indicator}")
+
+    def _sort_key(self, value: Any) -> tuple[int, Any]:
+        """Generate a sort key that handles numeric strings.
+
+        Returns a tuple (type_order, parsed_value) where type_order ensures
+        numbers sort before strings.
+        """
+        if value is None or value == "":
+            return (2, "")  # Empty values sort last
+
+        if isinstance(value, str):
+            # Try to parse as number (handles $1,234.56 and 1,234.56 formats)
+            cleaned = value.replace("$", "").replace(",", "").replace("%", "").strip()
+            if cleaned == "-":
+                return (2, "")  # Dash means no value
+            try:
+                return (0, float(cleaned))
+            except ValueError:
+                return (1, value.lower())  # String comparison, case-insensitive
+
+        # Already a number
+        if isinstance(value, int | float):
+            return (0, float(value))
+
+        return (1, str(value).lower())
 
     def _on_header_click(self, column: str) -> None:
         """Handle column header click for sorting.
