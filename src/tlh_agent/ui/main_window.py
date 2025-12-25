@@ -1,12 +1,22 @@
 """Main window with sidebar navigation and content area."""
 
+import logging
 import tkinter as tk
 from tkinter import ttk
 
+from tlh_agent.credentials import get_claude_api_key, has_claude_api_key
 from tlh_agent.services import get_provider
+from tlh_agent.services.assistant import AssistantController, AssistantState
+from tlh_agent.services.claude import ClaudeService
+from tlh_agent.services.claude_tools import ClaudeToolProvider
+from tlh_agent.services.index import IndexService
+from tlh_agent.services.rebalance import RebalanceService
+from tlh_agent.services.trade_queue import TradeQueueService
 from tlh_agent.ui.components.assistant_pane import AssistantPane
 from tlh_agent.ui.components.nav_sidebar import NavSidebar
 from tlh_agent.ui.theme import Colors, Fonts, Theme
+
+logger = logging.getLogger(__name__)
 
 
 class MainWindow(ttk.Frame):
@@ -23,8 +33,12 @@ class MainWindow(ttk.Frame):
         self._screens: dict[str, ttk.Frame] = {}
         self._current_screen: str | None = None
         self._assistant_visible: bool = False
+        self._assistant_controller: AssistantController | None = None
+        self._trade_queue = TradeQueueService()
+        self._streaming_text: str = ""
 
         self._setup_ui()
+        self._setup_assistant()
 
     def _setup_ui(self) -> None:
         """Set up the main window layout."""
@@ -175,14 +189,149 @@ class MainWindow(ttk.Frame):
             if hasattr(self, "_toggle_btn"):
                 self._toggle_btn.configure(text="Claude")
 
+    def _setup_assistant(self) -> None:
+        """Set up the Claude assistant controller."""
+        if not has_claude_api_key():
+            logger.info("Claude API key not configured")
+            return
+
+        try:
+            api_key = get_claude_api_key()
+            if not api_key:
+                return
+
+            provider = get_provider()
+
+            # Create Claude service
+            claude_service = ClaudeService(api_key=api_key)
+
+            # Create index service (for S&P 500 tracking)
+            index_service = IndexService()
+
+            # Create rebalance service if portfolio is available
+            rebalance_service = None
+            if provider.portfolio:
+                rebalance_service = RebalanceService(
+                    portfolio_service=provider.portfolio,
+                    index_service=index_service,
+                    wash_sale_service=provider.wash_sale,
+                )
+
+            # Create tool provider with all services
+            tool_provider = ClaudeToolProvider(
+                portfolio_service=provider.portfolio,
+                scanner=provider.scanner,
+                index_service=index_service,
+                rebalance_service=rebalance_service,
+                trade_queue=self._trade_queue,
+            )
+
+            # Create assistant controller
+            self._assistant_controller = AssistantController(
+                claude_service=claude_service,
+                tool_provider=tool_provider,
+            )
+
+            # Set up callbacks for UI updates
+            self._assistant_controller.set_callbacks(
+                on_text=self._on_assistant_text,
+                on_tool_use=self._on_assistant_tool_use,
+                on_tool_done=self._on_assistant_tool_done,
+                on_done=self._on_assistant_done,
+                on_error=self._on_assistant_error,
+                on_state_change=self._on_assistant_state_change,
+            )
+
+            logger.info("Claude assistant initialized successfully")
+
+        except Exception:
+            logger.exception("Failed to initialize Claude assistant")
+            self._assistant_controller = None
+
     def _on_assistant_message(self, message: str) -> None:
         """Handle a message from the user to the assistant.
 
         Args:
             message: The user's message.
         """
-        # For now, just echo back a placeholder response
-        # This will be connected to ClaudeService in the next step
-        self.assistant_pane.add_assistant_message(
-            "I received your message. Claude integration is coming soon!"
-        )
+        if not self._assistant_controller:
+            self.assistant_pane.add_assistant_message(
+                "Claude is not configured. Please add your API key in Settings."
+            )
+            return
+
+        # Disable input while processing
+        self.assistant_pane.set_enabled(False)
+
+        # Start streaming message
+        self._streaming_text = ""
+        self.assistant_pane.start_streaming_message("")
+
+        # Send message to Claude
+        self._assistant_controller.send_message(message)
+
+    def _on_assistant_text(self, text: str) -> None:
+        """Handle streaming text from Claude.
+
+        Args:
+            text: Text chunk from Claude.
+        """
+        self._streaming_text += text
+        # Update UI from main thread
+        self.after(0, lambda: self.assistant_pane.update_streaming_message(
+            self._streaming_text
+        ))
+
+    def _on_assistant_tool_use(self, tool_name: str) -> None:
+        """Handle tool use start.
+
+        Args:
+            tool_name: Name of the tool being used.
+        """
+        # Add tool use indicator
+        self.after(0, lambda: self.assistant_pane.add_tool_use(tool_name))
+
+    def _on_assistant_tool_done(self, tool_name: str, success: bool) -> None:
+        """Handle tool execution completion.
+
+        Args:
+            tool_name: Name of the tool.
+            success: Whether the tool succeeded.
+        """
+        # The tool use message is already showing, we could update its status
+        # For now, just log it
+        logger.debug(f"Tool {tool_name} completed: {'success' if success else 'error'}")
+
+    def _on_assistant_done(self) -> None:
+        """Handle assistant response completion."""
+        def _finish():
+            self.assistant_pane.finish_streaming_message()
+            self.assistant_pane.set_enabled(True)
+
+            # If trades were proposed, add a button to view the queue
+            if self._trade_queue.get_all_trades():
+                self.assistant_pane.add_action_button("View Trade Queue", "harvest")
+
+        self.after(0, _finish)
+
+    def _on_assistant_error(self, error: str) -> None:
+        """Handle assistant error.
+
+        Args:
+            error: Error message.
+        """
+        def _show_error():
+            self.assistant_pane.finish_streaming_message()
+            self.assistant_pane.add_assistant_message(f"Error: {error}")
+            self.assistant_pane.set_enabled(True)
+
+        self.after(0, _show_error)
+
+    def _on_assistant_state_change(self, state: AssistantState) -> None:
+        """Handle assistant state change.
+
+        Args:
+            state: New assistant state.
+        """
+        # Could update UI based on state (e.g., show processing indicator)
+        pass
