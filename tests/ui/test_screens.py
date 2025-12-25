@@ -124,7 +124,7 @@ class TestPositionsScreen:
 
 
 class TestHarvestQueueScreen:
-    """Tests for the Harvest Queue screen."""
+    """Tests for the Trade Queue screen."""
 
     def test_harvest_queue_loads(self, app, main_window, screenshots_dir):
         """Test that harvest queue screen loads correctly."""
@@ -404,7 +404,7 @@ class TestLayoutConsistency:
         screen_headers = {
             "dashboard": "Dashboard",
             "positions": "Positions",
-            "harvest": "Harvest Queue",
+            "harvest": "Trade Queue",
             "wash_sales": "Wash Sale Calendar",
             "history": "Trade History",
             "ledger": "Loss Ledger",

@@ -2,15 +2,23 @@
 
 Provides S&P 500 constituent data and target allocation calculations
 for index-tracking investment strategies.
+
+Data sources:
+1. SPY ETF holdings from State Street (primary - exact weights)
+2. Slickcharts S&P 500 list (fallback - approximate weights)
 """
 
+import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
-import aiohttp
-from bs4 import BeautifulSoup
+import pandas as pd
+import requests
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -47,12 +55,19 @@ class Position:
 class IndexService:
     """Service for S&P 500 index tracking.
 
-    Fetches S&P 500 constituent data from Wikipedia and calculates
-    target allocations for index-tracking portfolios.
+    Fetches S&P 500 constituent data with market-cap weights from:
+    1. SPY ETF holdings (State Street) - primary source with exact weights
+    2. Slickcharts - fallback with approximate weights
     """
 
-    # Wikipedia URL for S&P 500 list
-    SP500_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+    # SPY ETF holdings from State Street (exact weights)
+    SPY_XLSX_URL = (
+        "https://www.ssga.com/library-content/products/fund-data/etfs/us/"
+        "holdings-daily-us-en-spy.xlsx"
+    )
+
+    # Slickcharts fallback (approximate weights)
+    SLICKCHARTS_URL = "https://www.slickcharts.com/sp500"
 
     # Cache expiry time (24 hours)
     CACHE_EXPIRY_HOURS = 24
@@ -68,80 +83,143 @@ class IndexService:
         self._constituents: list[IndexConstituent] | None = None
         self._last_fetch: datetime | None = None
 
-    async def fetch_sp500_constituents(self) -> list[IndexConstituent]:
-        """Fetch S&P 500 constituents from Wikipedia.
+    def fetch_sp500_weights(self) -> list[IndexConstituent]:
+        """Fetch S&P 500 constituents with market-cap weights.
+
+        Tries SPY ETF holdings first (exact weights), falls back to Slickcharts.
 
         Returns:
             List of index constituents with weights.
         """
-        async with (
-            aiohttp.ClientSession() as session,
-            session.get(self.SP500_URL) as response,
-        ):
-            response.raise_for_status()
-            html = await response.text()
+        # Try SPY XLSX first (best source - exact weights)
+        try:
+            return self._fetch_from_spy_xlsx()
+        except Exception as e:
+            logger.warning(f"SPY XLSX failed, falling back to Slickcharts: {e}")
 
-        return self._parse_wikipedia_table(html)
+        # Fallback to Slickcharts
+        try:
+            return self._fetch_from_slickcharts()
+        except Exception as e:
+            logger.error(f"Slickcharts also failed: {e}")
+            raise RuntimeError("Failed to fetch S&P 500 data from any source") from e
 
-    def _parse_wikipedia_table(self, html: str) -> list[IndexConstituent]:
-        """Parse S&P 500 table from Wikipedia HTML.
-
-        Args:
-            html: Raw HTML from Wikipedia.
+    def _fetch_from_spy_xlsx(self) -> list[IndexConstituent]:
+        """Fetch weights from SPY ETF holdings XLSX.
 
         Returns:
-            List of constituents parsed from the table.
+            List of constituents with exact weights.
         """
-        soup = BeautifulSoup(html, "html.parser")
+        df = pd.read_excel(
+            self.SPY_XLSX_URL,
+            engine="openpyxl",
+            skiprows=4,  # Skip header junk
+        )
 
-        # Find the main table (first table with "Symbol" header)
+        # Normalize column names
+        df.columns = [str(c).strip() for c in df.columns]
+
+        # Find the relevant columns (names may vary slightly)
+        ticker_col = None
+        name_col = None
+        weight_col = None
+        sector_col = None
+
+        for col in df.columns:
+            col_lower = col.lower()
+            if "ticker" in col_lower or "symbol" in col_lower:
+                ticker_col = col
+            elif "name" in col_lower and "security" not in col_lower:
+                name_col = col
+            elif "weight" in col_lower:
+                weight_col = col
+            elif "sector" in col_lower:
+                sector_col = col
+
+        if not ticker_col or not weight_col:
+            raise ValueError(f"Could not find required columns. Found: {list(df.columns)}")
+
+        # Use ticker as name if no name column
+        if not name_col:
+            name_col = ticker_col
+
         constituents = []
-        tables = soup.find_all("table", class_="wikitable")
+        for _, row in df.iterrows():
+            ticker = str(row[ticker_col]).strip()
+            if not ticker or ticker == "nan" or len(ticker) > 5:
+                continue  # Skip invalid rows
 
-        for table in tables:
-            headers = table.find_all("th")
-            header_text = [h.get_text(strip=True).lower() for h in headers]
+            weight = row[weight_col]
+            if pd.isna(weight):
+                continue
 
-            if "symbol" in header_text:
-                # Found the right table
-                symbol_idx = header_text.index("symbol")
-                name_idx = header_text.index("security") if "security" in header_text else -1
-                sector_idx = (
-                    header_text.index("gics sector") if "gics sector" in header_text else -1
+            # Convert weight to percentage if needed
+            weight_pct = float(weight)
+            if weight_pct < 1:  # Appears to be a fraction (0.07 instead of 7%)
+                weight_pct *= 100
+
+            name = str(row[name_col]).strip() if name_col else ticker
+            sector_val = row.get(sector_col) if sector_col else None
+            has_sector = sector_val and not pd.isna(sector_val)
+            sector = str(sector_val).strip() if has_sector else "Unknown"
+
+            constituents.append(
+                IndexConstituent(
+                    symbol=ticker,
+                    name=name if name != "nan" else ticker,
+                    weight=Decimal(str(weight_pct)).quantize(Decimal("0.0001")),
+                    sector=sector if sector != "nan" else "Unknown",
                 )
+            )
 
-                rows = table.find_all("tr")[1:]  # Skip header row
+        if not constituents:
+            raise ValueError("No valid constituents found in SPY XLSX")
 
-                for row in rows:
-                    cells = row.find_all("td")
-                    if len(cells) > symbol_idx:
-                        symbol = cells[symbol_idx].get_text(strip=True)
-                        name = cells[name_idx].get_text(strip=True) if name_idx >= 0 else symbol
-                        sector = (
-                            cells[sector_idx].get_text(strip=True)
-                            if sector_idx >= 0 and len(cells) > sector_idx
-                            else "Unknown"
-                        )
+        logger.info(f"Loaded {len(constituents)} constituents from SPY XLSX")
+        return constituents
 
-                        # Wikipedia doesn't have weights, we'll use equal weight
-                        # for now. Real implementation would fetch from financial API
-                        constituents.append(
-                            IndexConstituent(
-                                symbol=symbol,
-                                name=name,
-                                weight=Decimal("0"),  # Will be calculated below
-                                sector=sector,
-                            )
-                        )
+    def _fetch_from_slickcharts(self) -> list[IndexConstituent]:
+        """Fetch weights from Slickcharts (fallback).
 
-                break
+        Returns:
+            List of constituents with approximate weights.
+        """
+        headers = {"User-Agent": "Mozilla/5.0"}
+        resp = requests.get(self.SLICKCHARTS_URL, headers=headers, timeout=10)
+        resp.raise_for_status()
 
-        # Calculate equal weights if no weights provided
-        if constituents:
-            equal_weight = Decimal("100") / len(constituents)
-            for c in constituents:
-                c.weight = equal_weight.quantize(Decimal("0.0001"))
+        # Parse HTML tables with pandas
+        tables = pd.read_html(resp.text)
+        if not tables:
+            raise ValueError("No tables found on Slickcharts page")
 
+        df = tables[0]
+
+        # Slickcharts columns: ['#', 'Company', 'Symbol', 'Weight', 'Price', ...]
+        constituents = []
+        for _, row in df.iterrows():
+            symbol = str(row.get("Symbol", "")).strip()
+            if not symbol or symbol == "nan":
+                continue
+
+            weight_str = str(row.get("Weight", "0"))
+            weight_pct = float(weight_str.rstrip("%"))
+
+            name = str(row.get("Company", symbol)).strip()
+
+            constituents.append(
+                IndexConstituent(
+                    symbol=symbol,
+                    name=name if name != "nan" else symbol,
+                    weight=Decimal(str(weight_pct)).quantize(Decimal("0.0001")),
+                    sector="Unknown",  # Slickcharts doesn't provide sector
+                )
+            )
+
+        if not constituents:
+            raise ValueError("No valid constituents found on Slickcharts")
+
+        logger.info(f"Loaded {len(constituents)} constituents from Slickcharts")
         return constituents
 
     def get_cached_constituents(self) -> list[IndexConstituent] | None:
@@ -161,8 +239,6 @@ class IndexService:
         # Try to load from file cache
         if self._cache_file.exists():
             try:
-                import json
-
                 data = json.loads(self._cache_file.read_text())
                 last_fetch = datetime.fromisoformat(data["last_fetch"])
 
@@ -189,8 +265,6 @@ class IndexService:
         Args:
             constituents: List of constituents to cache.
         """
-        import json
-
         self._cache_dir.mkdir(parents=True, exist_ok=True)
 
         data = {
@@ -210,11 +284,11 @@ class IndexService:
         self._constituents = constituents
         self._last_fetch = datetime.now()
 
-    async def get_constituents(self) -> list[IndexConstituent]:
+    def get_constituents(self) -> list[IndexConstituent]:
         """Get S&P 500 constituents, using cache if available.
 
         Returns:
-            List of index constituents.
+            List of index constituents with market-cap weights.
         """
         # Try cache first
         cached = self.get_cached_constituents()
@@ -222,7 +296,7 @@ class IndexService:
             return cached
 
         # Fetch fresh data
-        constituents = await self.fetch_sp500_constituents()
+        constituents = self.fetch_sp500_weights()
 
         # Save to cache
         self.save_cache(constituents)
@@ -333,3 +407,23 @@ class IndexService:
                 sector_weights[c.sector] = c.weight
 
         return sector_weights
+
+    def get_top_holdings(
+        self,
+        n: int = 10,
+        constituents: list[IndexConstituent] | None = None,
+    ) -> list[IndexConstituent]:
+        """Get the top N holdings by weight.
+
+        Args:
+            n: Number of top holdings to return.
+            constituents: Optional list of constituents.
+
+        Returns:
+            List of top N constituents by weight.
+        """
+        if constituents is None:
+            constituents = self._constituents or []
+
+        sorted_constituents = sorted(constituents, key=lambda c: c.weight, reverse=True)
+        return sorted_constituents[:n]

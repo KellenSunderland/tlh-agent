@@ -4,8 +4,9 @@ import json
 from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
+import pandas as pd
 import pytest
 
 from tlh_agent.services.index import IndexConstituent, IndexService, Position, TargetAllocation
@@ -75,36 +76,6 @@ class TestIndexService:
         service = IndexService(cache_dir=temp_cache_dir)
 
         assert service._cache_dir == temp_cache_dir
-
-    def test_parse_wikipedia_table(self, service: IndexService) -> None:
-        """Test parsing S&P 500 table from Wikipedia HTML."""
-        html = """
-        <html>
-        <table class="wikitable">
-            <tr><th>Symbol</th><th>Security</th><th>GICS Sector</th></tr>
-            <tr><td>AAPL</td><td>Apple Inc.</td><td>Information Technology</td></tr>
-            <tr><td>MSFT</td><td>Microsoft Corporation</td><td>Information Technology</td></tr>
-            <tr><td>GOOGL</td><td>Alphabet Inc.</td><td>Communication Services</td></tr>
-        </table>
-        </html>
-        """
-
-        constituents = service._parse_wikipedia_table(html)
-
-        assert len(constituents) == 3
-        assert constituents[0].symbol == "AAPL"
-        assert constituents[0].name == "Apple Inc."
-        assert constituents[0].sector == "Information Technology"
-        # Equal weights: 100 / 3 = 33.3333...
-        assert constituents[0].weight == Decimal("33.3333")
-
-    def test_parse_wikipedia_table_empty(self, service: IndexService) -> None:
-        """Test parsing empty HTML."""
-        html = "<html><body></body></html>"
-
-        constituents = service._parse_wikipedia_table(html)
-
-        assert constituents == []
 
     def test_get_cached_constituents_empty(self, service: IndexService) -> None:
         """Test getting cached constituents when cache is empty."""
@@ -284,44 +255,167 @@ class TestIndexService:
 
         assert summary == {}
 
+    def test_get_top_holdings(self, service: IndexService) -> None:
+        """Test getting top holdings by weight."""
+        service._constituents = [
+            IndexConstituent(symbol="AAPL", name="Apple", weight=Decimal("7.0"), sector="Tech"),
+            IndexConstituent(symbol="MSFT", name="Microsoft", weight=Decimal("6.5"), sector="Tech"),
+            IndexConstituent(symbol="NVDA", name="NVIDIA", weight=Decimal("6.0"), sector="Tech"),
+            IndexConstituent(symbol="AMZN", name="Amazon", weight=Decimal("3.5"), sector="Tech"),
+            IndexConstituent(symbol="GOOGL", name="Alphabet", weight=Decimal("2.0"), sector="Tech"),
+        ]
 
-class TestIndexServiceAsync:
-    """Async tests for IndexService."""
+        top_3 = service.get_top_holdings(n=3)
+
+        assert len(top_3) == 3
+        assert top_3[0].symbol == "AAPL"
+        assert top_3[1].symbol == "MSFT"
+        assert top_3[2].symbol == "NVDA"
+
+
+class TestIndexServiceFetch:
+    """Tests for IndexService fetching methods."""
 
     @pytest.fixture
     def service(self, tmp_path: Path) -> IndexService:
         """Create an IndexService instance."""
         return IndexService(cache_dir=tmp_path)
 
-    @pytest.mark.asyncio
-    async def test_fetch_sp500_constituents(self, service: IndexService) -> None:
-        """Test fetching S&P 500 constituents."""
-        mock_html = """
-        <html>
-        <table class="wikitable">
-            <tr><th>Symbol</th><th>Security</th><th>GICS Sector</th></tr>
-            <tr><td>AAPL</td><td>Apple Inc.</td><td>Information Technology</td></tr>
-        </table>
-        </html>
-        """
+    def test_fetch_from_spy_xlsx(self, service: IndexService) -> None:
+        """Test fetching from SPY XLSX with mocked pandas."""
+        sectors = ["Information Technology"] * 3
+        mock_df = pd.DataFrame({
+            "Ticker": ["AAPL", "MSFT", "NVDA"],
+            "Name": ["Apple Inc.", "Microsoft Corp", "NVIDIA Corp"],
+            "Weight": [0.07, 0.065, 0.06],  # Fractions
+            "Sector": sectors,
+        })
 
-        with patch("aiohttp.ClientSession") as mock_session_class:
-            mock_response = AsyncMock()
-            mock_response.raise_for_status = MagicMock()
-            mock_response.text = AsyncMock(return_value=mock_html)
+        with patch("pandas.read_excel", return_value=mock_df):
+            constituents = service._fetch_from_spy_xlsx()
 
-            mock_session = MagicMock()
-            mock_get_cm = AsyncMock(
-                __aenter__=AsyncMock(return_value=mock_response),
-                __aexit__=AsyncMock(),
-            )
-            mock_session.get = MagicMock(return_value=mock_get_cm)
-            mock_session.__aenter__ = AsyncMock(return_value=mock_session)
-            mock_session.__aexit__ = AsyncMock()
+        assert len(constituents) == 3
+        assert constituents[0].symbol == "AAPL"
+        assert constituents[0].name == "Apple Inc."
+        assert constituents[0].weight == Decimal("7.0000")  # Converted from 0.07
+        assert constituents[0].sector == "Information Technology"
 
-            mock_session_class.return_value = mock_session
+    def test_fetch_from_spy_xlsx_percentage_weights(self, service: IndexService) -> None:
+        """Test fetching when weights are already percentages."""
+        mock_df = pd.DataFrame({
+            "Ticker": ["AAPL", "MSFT"],
+            "Name": ["Apple Inc.", "Microsoft Corp"],
+            "Weight": [7.0, 6.5],  # Already percentages
+            "Sector": ["Technology", "Technology"],
+        })
 
-            constituents = await service.fetch_sp500_constituents()
+        with patch("pandas.read_excel", return_value=mock_df):
+            constituents = service._fetch_from_spy_xlsx()
 
-            assert len(constituents) == 1
-            assert constituents[0].symbol == "AAPL"
+        assert constituents[0].weight == Decimal("7.0000")
+        assert constituents[1].weight == Decimal("6.5000")
+
+    def test_fetch_from_slickcharts(self, service: IndexService) -> None:
+        """Test fetching from Slickcharts fallback."""
+        mock_df = pd.DataFrame({
+            "Company": ["Apple Inc.", "Microsoft Corp", "NVIDIA Corp"],
+            "Symbol": ["AAPL", "MSFT", "NVDA"],
+            "Weight": ["7.0%", "6.5%", "6.0%"],
+        })
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.text = "<html><table></table></html>"
+
+        with (
+            patch("requests.get", return_value=mock_response),
+            patch("pandas.read_html", return_value=[mock_df]),
+        ):
+            constituents = service._fetch_from_slickcharts()
+
+        assert len(constituents) == 3
+        assert constituents[0].symbol == "AAPL"
+        assert constituents[0].name == "Apple Inc."
+        assert constituents[0].weight == Decimal("7.0000")
+        assert constituents[0].sector == "Unknown"  # Slickcharts doesn't provide sector
+
+    def test_fetch_sp500_weights_primary_source(self, service: IndexService) -> None:
+        """Test fetching weights tries SPY XLSX first."""
+        mock_df = pd.DataFrame({
+            "Ticker": ["AAPL"],
+            "Name": ["Apple Inc."],
+            "Weight": [7.0],
+            "Sector": ["Technology"],
+        })
+
+        with patch("pandas.read_excel", return_value=mock_df):
+            constituents = service.fetch_sp500_weights()
+
+        assert len(constituents) == 1
+        assert constituents[0].symbol == "AAPL"
+
+    def test_fetch_sp500_weights_fallback_to_slickcharts(self, service: IndexService) -> None:
+        """Test fetching weights falls back to Slickcharts on SPY failure."""
+        mock_slickcharts_df = pd.DataFrame({
+            "Company": ["Apple Inc."],
+            "Symbol": ["AAPL"],
+            "Weight": ["7.0%"],
+        })
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.text = "<html><table></table></html>"
+
+        with (
+            patch("pandas.read_excel", side_effect=Exception("Network error")),
+            patch("requests.get", return_value=mock_response),
+            patch("pandas.read_html", return_value=[mock_slickcharts_df]),
+        ):
+            constituents = service.fetch_sp500_weights()
+
+        assert len(constituents) == 1
+        assert constituents[0].symbol == "AAPL"
+
+    def test_fetch_sp500_weights_all_sources_fail(self, service: IndexService) -> None:
+        """Test that error is raised when all sources fail."""
+        with (
+            patch("pandas.read_excel", side_effect=Exception("SPY failed")),
+            patch("requests.get", side_effect=Exception("Slickcharts failed")),
+            pytest.raises(RuntimeError, match="Failed to fetch S&P 500 data"),
+        ):
+            service.fetch_sp500_weights()
+
+    def test_get_constituents_uses_cache(self, service: IndexService) -> None:
+        """Test that get_constituents uses cache when available."""
+        service._constituents = [
+            IndexConstituent(symbol="AAPL", name="Apple", weight=Decimal("7.0"), sector="Tech")
+        ]
+        service._last_fetch = datetime.now()
+
+        with patch("pandas.read_excel") as mock_excel:
+            constituents = service.get_constituents()
+
+        # Should not have called read_excel since cache is valid
+        mock_excel.assert_not_called()
+        assert len(constituents) == 1
+        assert constituents[0].symbol == "AAPL"
+
+    def test_get_constituents_fetches_when_cache_expired(self, service: IndexService) -> None:
+        """Test that get_constituents fetches fresh data when cache is expired."""
+        service._constituents = [
+            IndexConstituent(symbol="OLD", name="Old", weight=Decimal("1.0"), sector="Tech")
+        ]
+        service._last_fetch = datetime.now() - timedelta(hours=25)
+
+        mock_df = pd.DataFrame({
+            "Ticker": ["NEW"],
+            "Name": ["New Stock"],
+            "Weight": [5.0],
+            "Sector": ["Technology"],
+        })
+
+        with patch("pandas.read_excel", return_value=mock_df):
+            constituents = service.get_constituents()
+
+        assert len(constituents) == 1
+        assert constituents[0].symbol == "NEW"
