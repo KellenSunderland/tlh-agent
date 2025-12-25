@@ -2,6 +2,7 @@
 
 import tkinter as tk
 
+from tlh_agent.services import ServiceProvider, set_provider
 from tlh_agent.ui.main_window import MainWindow
 from tlh_agent.ui.theme import Theme
 
@@ -15,6 +16,10 @@ class TLHAgentApp:
         self.root.title("TLH Agent")
         self.root.geometry("1200x800")
         self.root.minsize(1000, 600)
+
+        # Initialize services
+        self.services = ServiceProvider.create()
+        set_provider(self.services)
 
         # Configure theme
         Theme.configure_styles(self.root)

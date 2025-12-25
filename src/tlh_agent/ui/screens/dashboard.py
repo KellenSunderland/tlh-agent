@@ -3,6 +3,7 @@
 import tkinter as tk
 
 from tlh_agent.data.mock_data import MockDataFactory
+from tlh_agent.services import get_provider
 from tlh_agent.ui.base import BaseScreen
 from tlh_agent.ui.components.card import Card, MetricCard
 from tlh_agent.ui.components.page_header import PageHeader
@@ -70,8 +71,14 @@ class DashboardScreen(BaseScreen):
         self.alerts_content = self.alerts_card.content
 
     def refresh(self) -> None:
-        """Refresh dashboard data from mock data source."""
-        summary = MockDataFactory.get_portfolio_summary()
+        """Refresh dashboard data from services or mock data."""
+        provider = get_provider()
+
+        # Try to get data from services, fall back to mock
+        if provider.is_live and provider.portfolio:
+            summary = provider.portfolio.get_portfolio_summary()
+        else:
+            summary = MockDataFactory.get_portfolio_summary()
 
         # Update summary cards
         self.cards["total_value"].set_value(f"${summary.total_value:,.2f}")
@@ -86,14 +93,21 @@ class DashboardScreen(BaseScreen):
         for widget in self.opps_content.winfo_children():
             widget.destroy()
 
-        opportunities = MockDataFactory.get_harvest_opportunities()[:3]
+        if provider.is_live and provider.scanner:
+            scan_result = provider.scanner.scan()
+            opportunities = scan_result.opportunities[:3]
+        else:
+            opportunities = MockDataFactory.get_harvest_opportunities()[:3]
         self._build_opportunities_table(opportunities)
 
         # Clear and rebuild alerts list
         for widget in self.alerts_content.winfo_children():
             widget.destroy()
 
-        restrictions = MockDataFactory.get_active_wash_sale_restrictions()
+        # Wash sale service is always available
+        restrictions = provider.wash_sale.get_active_restrictions()
+        if not restrictions:
+            restrictions = MockDataFactory.get_active_wash_sale_restrictions()
         self._build_alerts_list(restrictions)
 
     def _build_opportunities_table(self, opportunities: list) -> None:
