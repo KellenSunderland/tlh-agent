@@ -16,7 +16,7 @@ class AssistantPane(tk.Frame):
     """
 
     # Pane width
-    WIDTH = 360
+    WIDTH = 480
 
     def __init__(
         self,
@@ -47,8 +47,16 @@ class AssistantPane(tk.Frame):
 
     def _setup_ui(self) -> None:
         """Set up the assistant pane UI."""
+        # Left border for visual separation
+        left_border = tk.Frame(self, bg=Colors.ACCENT, width=3)
+        left_border.pack(side=tk.LEFT, fill=tk.Y)
+
+        # Main content container
+        main_content = tk.Frame(self, bg=Colors.BG_SECONDARY)
+        main_content.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
         # Header
-        header = tk.Frame(self, bg=Colors.BG_TERTIARY)
+        header = tk.Frame(main_content, bg=Colors.BG_TERTIARY)
         header.pack(fill=tk.X)
 
         header_content = tk.Frame(header, bg=Colors.BG_TERTIARY, padx=Spacing.MD, pady=Spacing.SM)
@@ -78,7 +86,7 @@ class AssistantPane(tk.Frame):
         self.clear_btn.pack(side=tk.RIGHT)
 
         # Chat area (scrollable)
-        chat_container = tk.Frame(self, bg=Colors.BG_PRIMARY)
+        chat_container = tk.Frame(main_content, bg=Colors.BG_PRIMARY)
         chat_container.pack(fill=tk.BOTH, expand=True)
 
         # Canvas for scrolling
@@ -114,7 +122,7 @@ class AssistantPane(tk.Frame):
         self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
 
         # Input area
-        input_container = tk.Frame(self, bg=Colors.BG_SECONDARY, padx=Spacing.SM, pady=Spacing.SM)
+        input_container = tk.Frame(main_content, bg=Colors.BG_SECONDARY, padx=Spacing.SM, pady=Spacing.SM)
         input_container.pack(fill=tk.X, side=tk.BOTTOM)
 
         # Text entry

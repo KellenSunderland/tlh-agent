@@ -161,11 +161,12 @@ class SettingsScreen(BaseScreen):
             "Model:",
             widget_type="dropdown",
             options=[
+                "claude-opus-4-5-20251101",
                 "claude-sonnet-4-20250514",
                 "claude-3-5-sonnet-20241022",
                 "claude-3-haiku-20240307",
             ],
-            default="claude-sonnet-4-20250514",
+            default="claude-opus-4-5-20251101",
         )
 
         # Status indicator

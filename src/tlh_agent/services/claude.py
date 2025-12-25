@@ -4,11 +4,28 @@ Provides Claude AI integration for natural language portfolio commands
 and trade recommendations.
 """
 
+import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from typing import Any
 
 import anthropic
+
+from pathlib import Path
+
+# Set up dedicated log file for agent debugging (same as assistant.py)
+LOG_FILE = Path.home() / ".tlh-agent" / "agent.log"
+LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+file_handler = logging.FileHandler(LOG_FILE, mode='a')
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter(
+    '%(asctime)s | %(levelname)s | %(name)s | %(message)s'
+))
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+logger.addHandler(file_handler)
 
 
 @dataclass
@@ -48,7 +65,7 @@ class ClaudeService:
     """
 
     api_key: str
-    model: str = "claude-sonnet-4-20250514"
+    model: str = "claude-opus-4-5-20251101"
     max_tokens: int = 4096
     _client: anthropic.AsyncAnthropic = field(init=False, repr=False)
     _history: list[dict[str, Any]] = field(default_factory=list, repr=False)
@@ -63,7 +80,9 @@ Your job is to help users:
 
 Always be clear about the financial implications of any actions.
 When proposing trades, explain the reasoning and tax impact.
-Be concise but thorough in your responses.""",
+Be concise but thorough in your responses.
+
+IMPORTANT: Only use ONE tool at a time. Wait for the result before using another tool.""",
         repr=False,
     )
 
@@ -86,6 +105,8 @@ Be concise but thorough in your responses.""",
             StreamEvent objects as the response streams in.
         """
         # Add user message to history
+        logger.info("=== CLAUDE SEND_MESSAGE START ===")
+        logger.debug(f"User message: {message[:100]}...")
         self._history.append({"role": "user", "content": message})
 
         # Build tools for API
@@ -99,8 +120,12 @@ Be concise but thorough in your responses.""",
                 }
                 for tool in tools
             ]
+            logger.debug(f"Tools provided: {[t.name for t in tools]}")
+        else:
+            logger.debug("No tools provided")
 
         # Create streaming message
+        logger.info(f"Creating streaming message with model={self.model}, max_tokens={self.max_tokens}")
         async with self._client.messages.stream(
             model=self.model,
             max_tokens=self.max_tokens,
@@ -108,11 +133,15 @@ Be concise but thorough in your responses.""",
             messages=self._history,
             tools=api_tools or anthropic.NOT_GIVEN,
         ) as stream:
+            logger.debug("Stream opened successfully")
             assistant_content: list[dict[str, Any]] = []
             current_text = ""
             current_tool_use: dict[str, Any] | None = None
+            event_count = 0
 
             async for event in stream:
+                event_count += 1
+                logger.debug(f"Stream event #{event_count}: type={event.type}")
                 if event.type == "content_block_start":
                     if event.content_block.type == "text":
                         current_text = ""
@@ -141,15 +170,22 @@ Be concise but thorough in your responses.""",
 
                 elif event.type == "message_stop":
                     # Get the final message to extract tool use
+                    logger.info("message_stop received, getting final message...")
                     final_message = await stream.get_final_message()
+                    logger.debug(f"Final message content blocks: {len(final_message.content)}")
                     for block in final_message.content:
+                        logger.debug(f"Processing block type: {block.type}")
                         if block.type == "tool_use":
+                            logger.info(f"=== TOOL_USE DETECTED: {block.name} ===")
+                            logger.debug(f"Tool ID: {block.id}")
+                            logger.debug(f"Tool input: {block.input}")
                             yield StreamEvent(
                                 type="tool_use",
                                 tool_name=block.name,
                                 tool_input=dict(block.input),
                                 tool_use_id=block.id,
                             )
+                            logger.debug(f"Yielded tool_use StreamEvent for {block.name}")
                             assistant_content.append(
                                 {
                                     "type": "tool_use",
@@ -162,7 +198,9 @@ Be concise but thorough in your responses.""",
                     # Add assistant message to history
                     if assistant_content:
                         self._history.append({"role": "assistant", "content": assistant_content})
+                        logger.debug(f"Added assistant content to history: {len(assistant_content)} blocks")
 
+                    logger.info(f"=== CLAUDE SEND_MESSAGE COMPLETE (events: {event_count}) ===")
                     yield StreamEvent(type="message_done")
 
     async def add_tool_result(
@@ -182,6 +220,10 @@ Be concise but thorough in your responses.""",
             StreamEvent objects as Claude processes the result.
         """
         # Add tool result to history
+        logger.info("=== CLAUDE ADD_TOOL_RESULT START ===")
+        logger.debug(f"Tool use ID: {tool_use_id}")
+        logger.debug(f"Result length: {len(result)}")
+        logger.debug(f"Is error: {is_error}")
         self._history.append(
             {
                 "role": "user",
@@ -195,18 +237,24 @@ Be concise but thorough in your responses.""",
                 ],
             }
         )
+        logger.debug("Tool result added to history")
 
         # Continue the conversation
+        logger.info("Continuing conversation with tool result...")
         async with self._client.messages.stream(
             model=self.model,
             max_tokens=self.max_tokens,
             system=self._system_prompt,
             messages=self._history,
         ) as stream:
+            logger.debug("Tool result stream opened successfully")
             assistant_content: list[dict[str, Any]] = []
             current_text = ""
+            event_count = 0
 
             async for event in stream:
+                event_count += 1
+                logger.debug(f"Tool result stream event #{event_count}: type={event.type}")
                 if event.type == "content_block_start":
                     if event.content_block.type == "text":
                         current_text = ""
@@ -222,9 +270,13 @@ Be concise but thorough in your responses.""",
 
                 elif event.type == "message_stop":
                     # Get final message to check for more tool uses
+                    logger.info("Tool result message_stop received, getting final message...")
                     final_message = await stream.get_final_message()
+                    logger.debug(f"Tool result final message content blocks: {len(final_message.content)}")
                     for block in final_message.content:
+                        logger.debug(f"Processing block type: {block.type}")
                         if block.type == "tool_use":
+                            logger.info(f"=== FOLLOW-UP TOOL_USE DETECTED: {block.name} ===")
                             yield StreamEvent(
                                 type="tool_use",
                                 tool_name=block.name,
@@ -242,7 +294,9 @@ Be concise but thorough in your responses.""",
 
                     if assistant_content:
                         self._history.append({"role": "assistant", "content": assistant_content})
+                        logger.debug(f"Added tool result assistant content to history: {len(assistant_content)} blocks")
 
+                    logger.info(f"=== CLAUDE ADD_TOOL_RESULT COMPLETE (events: {event_count}) ===")
                     yield StreamEvent(type="message_done")
 
     def get_conversation_history(self) -> list[Message]:

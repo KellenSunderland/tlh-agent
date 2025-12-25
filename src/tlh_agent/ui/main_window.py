@@ -94,13 +94,16 @@ class MainWindow(ttk.Frame):
         self.content_frame = ttk.Frame(content_wrapper, style="TFrame")
         self.content_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # Assistant pane (right side, initially hidden)
+        # Assistant pane (right side, shown by default)
         self._assistant_separator = ttk.Separator(self, orient=tk.VERTICAL)
+        self._assistant_separator.pack(side=tk.RIGHT, fill=tk.Y)
         self.assistant_pane = AssistantPane(
             self,
             on_send=self._on_assistant_message,
             on_navigate=self._on_navigate,
         )
+        self.assistant_pane.pack(side=tk.RIGHT, fill=tk.Y)
+        self._assistant_visible = True
 
         # Initialize screens (lazy loading)
         self._init_screens()

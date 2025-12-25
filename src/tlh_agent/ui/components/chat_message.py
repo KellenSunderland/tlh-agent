@@ -65,7 +65,7 @@ class ChatMessage(tk.Frame):
             font=Fonts.BODY,
             fg=text_color,
             bg=bg_color,
-            wraplength=280,  # Max width for message bubble
+            wraplength=400,  # Max width for message bubble
             justify=tk.LEFT,
             anchor=tk.W,
         )
