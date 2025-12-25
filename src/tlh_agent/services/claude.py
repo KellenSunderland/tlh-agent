@@ -7,11 +7,10 @@ and trade recommendations.
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 import anthropic
-
-from pathlib import Path
 
 # Set up dedicated log file for agent debugging (same as assistant.py)
 LOG_FILE = Path.home() / ".tlh-agent" / "agent.log"
@@ -65,27 +64,44 @@ class ClaudeService:
     """
 
     api_key: str
-    model: str = "claude-opus-4-5-20251101"
-    max_tokens: int = 4096
+    model: str = "claude-sonnet-4-5-20250929"
+    max_tokens: int = 16384  # Need more tokens to generate 503 trades
     _client: anthropic.AsyncAnthropic = field(init=False, repr=False)
     _history: list[dict[str, Any]] = field(default_factory=list, repr=False)
     _system_prompt: str = field(
-        default="""You are a portfolio assistant for a DIRECT INDEXING tax-loss harvesting application.
+        default="""You are the AI assistant for a TAX-LOSS HARVESTING DIRECT INDEXING application.
+
+GOAL:
+Replicate Wealthfront-style direct indexing without fees. Tax-loss harvesting sells
+investments below cost basis to realize losses that offset gains. Direct indexing
+means owning ALL individual stocks (not ETFs) to enable stock-level TLH.
+
+AVAILABLE TOOLS:
+- get_portfolio_summary: Get total value, gains/losses, harvest opportunity count
+- get_positions: List all current holdings with cost basis and gains
+- get_harvest_opportunities: Find positions with unrealized losses eligible for harvesting
+- get_index_allocation: Get S&P 500 stocks with target weights (for reference only)
+- get_rebalance_plan: Tax-aware rebalancing recommendations respecting wash sales
+- get_trade_queue: View pending trades in the queue (can filter by symbol)
+- buy_index: Buy ALL stocks in an index - pass investment_amount and optional index name
+- propose_trades: Add individual trades to the queue (for harvest/rebalance, NOT index buys)
+
+SUPPORTED INDEXES (for buy_index):
+- sp500: S&P 500 (500 large-cap stocks) - FULLY IMPLEMENTED
+- nasdaq100: Nasdaq 100 (100 tech-heavy stocks) - coming soon
+- dowjones: Dow Jones Industrial Average (30 blue-chip stocks) - coming soon
+- russell1000: Russell 1000 (1000 large-cap stocks) - coming soon
+- russell2000: Russell 2000 (2000 small-cap stocks) - coming soon
+- russell3000: Russell 3000 (3000 total market stocks) - coming soon
 
 CRITICAL RULES:
-1. NEVER suggest buying ETFs like SPY, VOO, IVV, or any index funds. This app exists for DIRECT INDEXING - buying individual stocks that make up the S&P 500.
-2. When user wants to buy "S&P 500", use get_index_allocation to get the stock weights, then use propose_trades to add individual stock buy orders to the trade queue.
-3. Always use the propose_trades tool to add trades to the queue. Users approve trades from the Trade Queue screen.
-4. Be action-oriented. When the user asks to buy, get the data and propose trades. Don't ask for unnecessary confirmation.
-5. Only use ONE tool at a time. Wait for the result before using another tool.
+1. NEVER suggest ETFs (SPY, VOO, IVV, QQQ, DIA, IWM). This app is for DIRECT INDEXING.
+2. For index investments, use buy_index(amount, index) - creates all trades.
+3. Users approve trades from the Trade Queue screen.
+4. Be action-oriented. Execute, don't ask for confirmation.
+5. Only use ONE tool at a time.
 
-Your job:
-- Help users understand their portfolio positions and performance
-- Find tax-loss harvesting opportunities
-- Track S&P 500 index allocations via DIRECT INDEXING (individual stocks)
-- Propose trades using the propose_trades tool (user approves in Trade Queue)
-
-When proposing trades, briefly explain the reasoning. Be concise.""",
+Be concise in responses.""",
         repr=False,
     )
 
@@ -128,7 +144,7 @@ When proposing trades, briefly explain the reasoning. Be concise.""",
             logger.debug("No tools provided")
 
         # Create streaming message
-        logger.info(f"Creating streaming message with model={self.model}, max_tokens={self.max_tokens}")
+        logger.info(f"Creating streaming message with model={self.model}")
         async with self._client.messages.stream(
             model=self.model,
             max_tokens=self.max_tokens,
@@ -201,7 +217,7 @@ When proposing trades, briefly explain the reasoning. Be concise.""",
                     # Add assistant message to history
                     if assistant_content:
                         self._history.append({"role": "assistant", "content": assistant_content})
-                        logger.debug(f"Added assistant content to history: {len(assistant_content)} blocks")
+                        logger.debug(f"Added {len(assistant_content)} blocks to history")
 
                     logger.info(f"=== CLAUDE SEND_MESSAGE COMPLETE (events: {event_count}) ===")
                     yield StreamEvent(type="message_done")
@@ -275,7 +291,7 @@ When proposing trades, briefly explain the reasoning. Be concise.""",
                     # Get final message to check for more tool uses
                     logger.info("Tool result message_stop received, getting final message...")
                     final_message = await stream.get_final_message()
-                    logger.debug(f"Tool result final message content blocks: {len(final_message.content)}")
+                    logger.debug(f"Final message blocks: {len(final_message.content)}")
                     for block in final_message.content:
                         logger.debug(f"Processing block type: {block.type}")
                         if block.type == "tool_use":
@@ -297,7 +313,7 @@ When proposing trades, briefly explain the reasoning. Be concise.""",
 
                     if assistant_content:
                         self._history.append({"role": "assistant", "content": assistant_content})
-                        logger.debug(f"Added tool result assistant content to history: {len(assistant_content)} blocks")
+                        logger.debug(f"Added {len(assistant_content)} tool result blocks")
 
                     logger.info(f"=== CLAUDE ADD_TOOL_RESULT COMPLETE (events: {event_count}) ===")
                     yield StreamEvent(type="message_done")

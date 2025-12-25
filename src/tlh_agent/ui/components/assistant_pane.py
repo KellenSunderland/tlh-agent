@@ -122,7 +122,9 @@ class AssistantPane(tk.Frame):
         self.canvas.bind_all("<MouseWheel>", self._on_mousewheel)
 
         # Input area
-        input_container = tk.Frame(main_content, bg=Colors.BG_SECONDARY, padx=Spacing.SM, pady=Spacing.SM)
+        input_container = tk.Frame(
+            main_content, bg=Colors.BG_SECONDARY, padx=Spacing.SM, pady=Spacing.SM
+        )
         input_container.pack(fill=tk.X, side=tk.BOTTOM)
 
         # Text entry

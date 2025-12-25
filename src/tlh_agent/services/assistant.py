@@ -8,7 +8,6 @@ import logging
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -115,7 +114,7 @@ class AssistantController:
         Args:
             message: The user's message.
         """
-        logger.info(f"=== SEND_MESSAGE START ===")
+        logger.info("=== SEND_MESSAGE START ===")
         logger.info(f"User message: {message[:100]}...")
 
         if self._state.is_processing:
@@ -202,7 +201,8 @@ class AssistantController:
             pending_tool_uses: List to collect pending tool uses.
         """
         if event.type == "text" and event.text:
-            logger.debug(f"Text event: {event.text[:50]}..." if len(event.text) > 50 else f"Text event: {event.text}")
+            text_preview = event.text[:50] + "..." if len(event.text) > 50 else event.text
+            logger.debug(f"Text event: {text_preview}")
             self._safe_callback(self._on_text, event.text)
 
         elif event.type == "tool_use":

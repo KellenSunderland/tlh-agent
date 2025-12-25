@@ -33,7 +33,9 @@ class ToolName(Enum):
     GET_HARVEST_OPPORTUNITIES = "get_harvest_opportunities"
     GET_INDEX_ALLOCATION = "get_index_allocation"
     GET_REBALANCE_PLAN = "get_rebalance_plan"
+    GET_TRADE_QUEUE = "get_trade_queue"
     PROPOSE_TRADES = "propose_trades"
+    BUY_INDEX = "buy_index"
 
 
 @dataclass
@@ -149,7 +151,7 @@ class ClaudeToolProvider:
                     "properties": {
                         "top_n": {
                             "type": "integer",
-                            "description": "Number of stocks to return. Defaults to 503 (all S&P 500).",
+                            "description": "Number of stocks to return. Default 503.",
                         },
                     },
                     "required": [],
@@ -167,6 +169,23 @@ class ClaudeToolProvider:
                         "threshold_pct": {
                             "type": "number",
                             "description": "Minimum deviation % to trigger rebalance. Default 1.0.",
+                        },
+                    },
+                    "required": [],
+                },
+            ),
+            ToolDefinition(
+                name=ToolName.GET_TRADE_QUEUE.value,
+                description=(
+                    "Get pending trades in the Trade Queue. "
+                    "Shows symbol, shares, notional, and trade type."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "symbol": {
+                            "type": "string",
+                            "description": "Filter by symbol (e.g., 'NVDA'). Optional.",
                         },
                     },
                     "required": [],
@@ -204,6 +223,32 @@ class ClaudeToolProvider:
                     "required": ["trades", "trade_type"],
                 },
             ),
+            ToolDefinition(
+                name=ToolName.BUY_INDEX.value,
+                description=(
+                    "Buy all stocks in a market index with a specified investment amount. "
+                    "Automatically calculates shares based on market-cap weights. "
+                    "USE THIS instead of propose_trades for index buys."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "investment_amount": {
+                            "type": "number",
+                            "description": "Total dollar amount to invest across all index stocks.",
+                        },
+                        "index": {
+                            "type": "string",
+                            "enum": [
+                                "sp500", "nasdaq100", "dowjones",
+                                "russell1000", "russell2000", "russell3000",
+                            ],
+                            "description": "Which index to buy. Defaults to sp500.",
+                        },
+                    },
+                    "required": ["investment_amount"],
+                },
+            ),
         ]
 
     def execute_tool(self, tool_name: str, arguments: dict) -> ToolResult:
@@ -236,10 +281,19 @@ class ClaudeToolProvider:
                 return self._get_rebalance_plan(
                     threshold_pct=Decimal(str(arguments.get("threshold_pct", 1.0))),
                 )
+            elif tool_name == ToolName.GET_TRADE_QUEUE.value:
+                return self._get_trade_queue(
+                    symbol=arguments.get("symbol"),
+                )
             elif tool_name == ToolName.PROPOSE_TRADES.value:
                 return self._propose_trades(
                     trades=arguments.get("trades", []),
                     trade_type=arguments.get("trade_type", "rebalance"),
+                )
+            elif tool_name == ToolName.BUY_INDEX.value:
+                return self._buy_index(
+                    investment_amount=Decimal(str(arguments.get("investment_amount", 0))),
+                    index_name=arguments.get("index", "sp500"),
                 )
             else:
                 return ToolResult(success=False, data={}, error=f"Unknown tool: {tool_name}")
@@ -413,23 +467,17 @@ class ClaudeToolProvider:
             # Get top deviations
             top_allocations = allocations[:top_n]
 
+            # Return compact format to minimize tokens
+            # Format: {symbol: weight} for each stock
+            weights = {a.symbol: round(float(a.target_weight), 4) for a in top_allocations}
+
             return ToolResult(
                 success=True,
                 data={
                     "portfolio_value": float(portfolio_value),
-                    "index_constituents": len(constituents),
-                    "allocations": [
-                        {
-                            "symbol": a.symbol,
-                            "name": a.name,
-                            "target_weight": float(a.target_weight),
-                            "target_value": float(a.target_value),
-                            "current_value": float(a.current_value),
-                            "difference": float(a.difference),
-                            "difference_pct": float(a.difference_pct),
-                        }
-                        for a in top_allocations
-                    ],
+                    "stock_count": len(constituents),
+                    "weights": weights,
+                    "note": "Weights are %. Shares = (investment * weight / 100) / price",
                 },
             )
         except Exception as e:
@@ -470,6 +518,47 @@ class ClaudeToolProvider:
                         }
                         for r in plan.recommendations
                     ],
+                },
+            )
+        except Exception as e:
+            return ToolResult(success=False, data={}, error=str(e))
+
+    def _get_trade_queue(self, symbol: str | None = None) -> ToolResult:
+        """Get pending trades from the trade queue.
+
+        Args:
+            symbol: Optional symbol to filter by.
+
+        Returns:
+            ToolResult with pending trades.
+        """
+        try:
+            trades = self._trade_queue.get_pending_trades()
+
+            # Filter by symbol if provided
+            if symbol:
+                symbol_upper = symbol.upper()
+                trades = [t for t in trades if t.symbol == symbol_upper]
+
+            # Format for response
+            trade_list = [
+                {
+                    "symbol": t.symbol,
+                    "name": t.name,
+                    "action": t.action.value,
+                    "shares": float(t.shares),
+                    "notional": float(t.notional),
+                    "trade_type": t.trade_type.value,
+                    "reason": t.reason,
+                }
+                for t in trades
+            ]
+
+            return ToolResult(
+                success=True,
+                data={
+                    "pending_count": len(trade_list),
+                    "trades": trade_list,
                 },
             )
         except Exception as e:
@@ -529,4 +618,94 @@ class ClaudeToolProvider:
                 },
             )
         except Exception as e:
+            return ToolResult(success=False, data={}, error=str(e))
+
+    def _buy_index(self, investment_amount: Decimal, index_name: str = "sp500") -> ToolResult:
+        """Buy all stocks in an index with market-cap weighted allocation.
+
+        Args:
+            investment_amount: Total dollar amount to invest.
+            index_name: Which index to buy (sp500, nasdaq100, dowjones, etc.)
+
+        Returns:
+            ToolResult with trades added to queue.
+        """
+        if not self._index_service:
+            return ToolResult(
+                success=False,
+                data={},
+                error="Index service not available",
+            )
+
+        # Map index names to display names
+        index_display_names = {
+            "sp500": "S&P 500",
+            "nasdaq100": "Nasdaq 100",
+            "dowjones": "Dow Jones",
+            "russell1000": "Russell 1000",
+            "russell2000": "Russell 2000",
+            "russell3000": "Russell 3000",
+        }
+        display_name = index_display_names.get(index_name, index_name.upper())
+
+        # Currently only S&P 500 is fully implemented
+        if index_name != "sp500":
+            return ToolResult(
+                success=False,
+                data={},
+                error=f"{display_name} not yet implemented. Only S&P 500 available.",
+            )
+
+        try:
+            # Get all index constituents
+            constituents = self._index_service.get_constituents()
+
+            if not constituents:
+                return ToolResult(
+                    success=False,
+                    data={},
+                    error="No index constituents available",
+                )
+
+            added_trades = []
+            total_invested = Decimal("0")
+
+            for constituent in constituents:
+                # Calculate dollar amount for this stock
+                dollar_amount = investment_amount * constituent.weight / Decimal("100")
+
+                # Estimate price (use weight as rough proxy, or default $100)
+                # In production, would fetch real prices
+                estimated_price = Decimal("100")
+
+                # Calculate shares (allow fractional)
+                shares = dollar_amount / estimated_price
+
+                if shares > Decimal("0.0001"):  # Skip tiny positions
+                    queued = self._trade_queue.add_trade(
+                        trade_type=TradeType.INDEX_BUY,
+                        action=TradeAction.BUY,
+                        symbol=constituent.symbol,
+                        name=constituent.name,
+                        shares=shares.quantize(Decimal("0.0001")),
+                        current_price=estimated_price,
+                        reason=f"S&P 500 index buy ({float(constituent.weight):.2f}% weight)",
+                    )
+                    added_trades.append({
+                        "symbol": queued.symbol,
+                        "shares": float(queued.shares),
+                        "notional": float(queued.notional),
+                    })
+                    total_invested += queued.notional
+
+            return ToolResult(
+                success=True,
+                data={
+                    "trades_added": len(added_trades),
+                    "total_invested": float(total_invested),
+                    "message": f"Added {len(added_trades)} trades to queue.",
+                },
+            )
+        except Exception as e:
+            logger.exception("Error in buy_index")
             return ToolResult(success=False, data={}, error=str(e))

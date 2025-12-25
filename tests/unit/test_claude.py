@@ -23,7 +23,7 @@ class TestClaudeService:
 
             mock_client.assert_called_once_with(api_key="test-key")
             assert service.api_key == "test-key"
-            assert service.model == "claude-opus-4-5-20251101"
+            assert service.model == "claude-sonnet-4-5-20250929"
 
     def test_init_with_custom_model(self) -> None:
         """Test initialization with custom model."""

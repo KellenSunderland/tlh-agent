@@ -1,11 +1,17 @@
-"""S&P 500 index tracking service.
+"""Index tracking service for direct indexing.
 
-Provides S&P 500 constituent data and target allocation calculations
+Provides index constituent data and target allocation calculations
 for index-tracking investment strategies.
 
-Data sources:
-1. SPY ETF holdings from State Street (primary - exact weights)
-2. Slickcharts S&P 500 list (fallback - approximate weights)
+Supported indexes:
+- S&P 500 (500 large-cap stocks)
+- Nasdaq 100 (100 large-cap tech-heavy)
+- Dow Jones (30 blue-chip stocks)
+- Russell 1000 (1000 large-cap)
+- Russell 2000 (2000 small-cap)
+- Russell 3000 (3000 total market)
+
+Data sources: ETF holdings files from fund providers.
 """
 
 import json
@@ -13,12 +19,77 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
+from enum import Enum
 from pathlib import Path
 
 import pandas as pd
 import requests
 
 logger = logging.getLogger(__name__)
+
+
+class IndexType(Enum):
+    """Supported market indexes for direct indexing."""
+
+    SP500 = "sp500"           # S&P 500 - 500 large-cap
+    NASDAQ100 = "nasdaq100"   # Nasdaq 100 - 100 tech-heavy
+    DOWJONES = "dowjones"     # Dow Jones Industrial Average - 30 blue-chip
+    RUSSELL1000 = "russell1000"  # Russell 1000 - 1000 large-cap
+    RUSSELL2000 = "russell2000"  # Russell 2000 - 2000 small-cap
+    RUSSELL3000 = "russell3000"  # Russell 3000 - total market
+
+
+# ETF holdings URLs for each index
+INDEX_ETF_URLS = {
+    IndexType.SP500: {
+        "etf": "SPY",
+        "provider": "State Street",
+        "url": (
+            "https://www.ssga.com/library-content/products/fund-data/etfs/us/"
+            "holdings-daily-us-en-spy.xlsx"
+        ),
+    },
+    IndexType.NASDAQ100: {
+        "etf": "QQQ",
+        "provider": "Invesco",
+        "url": (
+            "https://www.invesco.com/us/financial-products/etfs/holdings/main/"
+            "holdings/0?audienceType=Investor&action=download&ticker=QQQ"
+        ),
+    },
+    IndexType.DOWJONES: {
+        "etf": "DIA",
+        "provider": "State Street",
+        "url": (
+            "https://www.ssga.com/library-content/products/fund-data/etfs/us/"
+            "holdings-daily-us-en-dia.xlsx"
+        ),
+    },
+    IndexType.RUSSELL1000: {
+        "etf": "IWB",
+        "provider": "iShares",
+        "url": (
+            "https://www.ishares.com/us/products/239707/ishares-russell-1000-etf/"
+            "1467271812596.ajax?fileType=csv&fileName=IWB_holdings&dataType=fund"
+        ),
+    },
+    IndexType.RUSSELL2000: {
+        "etf": "IWM",
+        "provider": "iShares",
+        "url": (
+            "https://www.ishares.com/us/products/239710/ishares-russell-2000-etf/"
+            "1467271812596.ajax?fileType=csv&fileName=IWM_holdings&dataType=fund"
+        ),
+    },
+    IndexType.RUSSELL3000: {
+        "etf": "IWV",
+        "provider": "iShares",
+        "url": (
+            "https://www.ishares.com/us/products/239714/ishares-russell-3000-etf/"
+            "1467271812596.ajax?fileType=csv&fileName=IWV_holdings&dataType=fund"
+        ),
+    },
+}
 
 
 @dataclass

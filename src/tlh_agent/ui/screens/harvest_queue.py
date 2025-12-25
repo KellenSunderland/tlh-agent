@@ -13,7 +13,7 @@ from typing import Any
 from tlh_agent.data.mock_data import HarvestOpportunity, MockDataFactory
 from tlh_agent.services import get_provider
 from tlh_agent.services.scanner import HarvestOpportunity as LiveHarvestOpportunity
-from tlh_agent.services.trade_queue import QueuedTrade, TradeQueueService
+from tlh_agent.services.trade_queue import TradeQueueService
 from tlh_agent.ui.base import BaseScreen
 from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.data_table import ColumnDef, DataTable

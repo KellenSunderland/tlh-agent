@@ -153,14 +153,16 @@ class TestClaudeToolProvider:
         """Test getting tool definitions."""
         definitions = provider.get_tool_definitions()
 
-        assert len(definitions) == 6
+        assert len(definitions) == 8
         names = [d.name for d in definitions]
         assert ToolName.GET_PORTFOLIO_SUMMARY.value in names
         assert ToolName.GET_POSITIONS.value in names
         assert ToolName.GET_HARVEST_OPPORTUNITIES.value in names
         assert ToolName.GET_INDEX_ALLOCATION.value in names
         assert ToolName.GET_REBALANCE_PLAN.value in names
+        assert ToolName.GET_TRADE_QUEUE.value in names
         assert ToolName.PROPOSE_TRADES.value in names
+        assert ToolName.BUY_INDEX.value in names
 
     def test_get_portfolio_summary(
         self,
@@ -255,7 +257,7 @@ class TestClaudeToolProvider:
 
         assert result.success is True
         assert "portfolio_value" in result.data
-        assert "allocations" in result.data
+        assert "weights" in result.data
 
     def test_get_index_allocation_no_service(
         self, mock_portfolio_service: MagicMock
