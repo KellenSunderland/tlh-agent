@@ -44,22 +44,19 @@ class DashboardScreen(BaseScreen):
         self.opps_card = Card(self, title="Top Harvest Opportunities")
         self.opps_card.pack(fill=tk.X, pady=(0, Spacing.LG))
 
-        # Add "View All" button to header
-        view_all_btn = tk.Button(
+        # Add "View All" link to header (styled as clickable text)
+        view_all_btn = tk.Label(
             self.opps_card._header,
-            text="View All",
-            font=Fonts.CAPTION,
-            fg=Colors.TEXT_PRIMARY,
-            bg=Colors.BG_TERTIARY,
-            activebackground=Colors.BORDER_LIGHT,
-            activeforeground=Colors.TEXT_PRIMARY,
-            relief=tk.FLAT,
+            text="View All →",
+            font=Fonts.BODY,
+            fg=Colors.ACCENT,
+            bg=Colors.BG_SECONDARY,
             cursor="hand2",
-            padx=Spacing.MD,
-            pady=Spacing.XS,
-            command=self._on_view_all_opportunities,
         )
-        view_all_btn.pack(side=tk.RIGHT)
+        view_all_btn.pack(side=tk.RIGHT, padx=Spacing.SM)
+        view_all_btn.bind("<Button-1>", lambda e: self._on_view_all_opportunities())
+        view_all_btn.bind("<Enter>", lambda e: view_all_btn.configure(fg=Colors.ACCENT_HOVER))
+        view_all_btn.bind("<Leave>", lambda e: view_all_btn.configure(fg=Colors.ACCENT))
 
         # Store reference to content frame
         self.opps_content = self.opps_card.content
