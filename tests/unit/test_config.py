@@ -3,6 +3,7 @@
 import json
 from decimal import Decimal
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -50,16 +51,18 @@ class TestAppConfig:
 
     def test_load_creates_defaults_when_no_file(self, temp_config_dir: Path) -> None:
         """Test load returns defaults when config file doesn't exist."""
-        config = AppConfig.load(temp_config_dir)
+        with patch("tlh_agent.config.get_alpaca_credentials", return_value=None):
+            config = AppConfig.load(temp_config_dir)
 
         assert config.alpaca_paper is True
         assert config.min_loss_usd == Decimal("100")
 
     def test_save_and_load(self, temp_config_dir: Path) -> None:
-        """Test saving and loading configuration."""
+        """Test saving and loading configuration.
+
+        Note: Credentials are stored in keychain, not JSON.
+        """
         original = AppConfig(
-            alpaca_api_key="my_key",
-            alpaca_secret_key="my_secret",
             alpaca_paper=False,
             min_loss_usd=Decimal("200"),
             min_loss_pct=Decimal("5.0"),
@@ -71,21 +74,32 @@ class TestAppConfig:
         # Verify file was created
         assert original.config_path.exists()
 
-        # Load it back
-        loaded = AppConfig.load(temp_config_dir)
+        # Load it back (mock keychain since we don't store credentials there in test)
+        with patch("tlh_agent.config.get_alpaca_credentials", return_value=None):
+            loaded = AppConfig.load(temp_config_dir)
 
-        assert loaded.alpaca_api_key == "my_key"
-        assert loaded.alpaca_secret_key == "my_secret"
         assert loaded.alpaca_paper is False
         assert loaded.min_loss_usd == Decimal("200")
         assert loaded.min_loss_pct == Decimal("5.0")
         assert loaded.tax_rate == Decimal("0.40")
 
+    def test_credentials_from_keychain(self, temp_config_dir: Path) -> None:
+        """Test that credentials are loaded from keychain."""
+        with patch(
+            "tlh_agent.config.get_alpaca_credentials",
+            return_value=("keychain_key", "keychain_secret"),
+        ):
+            config = AppConfig.load(temp_config_dir)
+
+        assert config.alpaca_api_key == "keychain_key"
+        assert config.alpaca_secret_key == "keychain_secret"
+
     def test_load_from_json_file(self, temp_config_dir: Path) -> None:
-        """Test loading from an existing JSON file."""
+        """Test loading settings from an existing JSON file.
+
+        Note: Credentials are not stored in JSON, only in keychain.
+        """
         config_data = {
-            "alpaca_api_key": "json_key",
-            "alpaca_secret_key": "json_secret",
             "alpaca_paper": True,
             "min_loss_usd": "150",
             "min_holding_days": 14,
@@ -95,10 +109,9 @@ class TestAppConfig:
         with open(config_path, "w") as f:
             json.dump(config_data, f)
 
-        config = AppConfig.load(temp_config_dir)
+        with patch("tlh_agent.config.get_alpaca_credentials", return_value=None):
+            config = AppConfig.load(temp_config_dir)
 
-        assert config.alpaca_api_key == "json_key"
-        assert config.alpaca_secret_key == "json_secret"
         assert config.min_loss_usd == Decimal("150")
         assert config.min_holding_days == 14
 
@@ -109,14 +122,33 @@ class TestAppConfig:
         assert config.config_path == temp_config_dir / "config.json"
         assert config.state_path == temp_config_dir / "state.json"
 
-    def test_env_var_override(
+    def test_env_var_fallback(
         self, temp_config_dir: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Test that environment variables override empty config values."""
+        """Test that environment variables are used when keychain has no credentials."""
         monkeypatch.setenv("ALPACA_API_KEY", "env_key")
         monkeypatch.setenv("ALPACA_SECRET_KEY", "env_secret")
 
-        config = AppConfig.load(temp_config_dir)
+        # When keychain returns None, fall back to env vars
+        with patch("tlh_agent.config.get_alpaca_credentials", return_value=None):
+            config = AppConfig.load(temp_config_dir)
 
         assert config.alpaca_api_key == "env_key"
         assert config.alpaca_secret_key == "env_secret"
+
+    def test_keychain_takes_precedence(
+        self, temp_config_dir: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Test that keychain credentials take precedence over env vars."""
+        monkeypatch.setenv("ALPACA_API_KEY", "env_key")
+        monkeypatch.setenv("ALPACA_SECRET_KEY", "env_secret")
+
+        # When keychain has credentials, they take precedence
+        with patch(
+            "tlh_agent.config.get_alpaca_credentials",
+            return_value=("keychain_key", "keychain_secret"),
+        ):
+            config = AppConfig.load(temp_config_dir)
+
+        assert config.alpaca_api_key == "keychain_key"
+        assert config.alpaca_secret_key == "keychain_secret"

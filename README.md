@@ -293,7 +293,34 @@ daily_trade_limit = 20
 1. Create an account at [alpaca.markets](https://alpaca.markets)
 2. Generate API keys in your dashboard
 3. Start with paper trading enabled to validate your configuration
-4. Set environment variables:
+4. Store your credentials securely using one of these methods:
+
+**Option A: macOS Keychain (Recommended)**
+
+Store credentials securely in the system keychain:
+
+```bash
+# Add your Alpaca API key
+security add-generic-password -a "alpaca_api_key" -s "tlh-agent" -w "your-api-key"
+
+# Add your Alpaca secret key
+security add-generic-password -a "alpaca_secret_key" -s "tlh-agent" -w "your-secret-key"
+```
+
+To view stored credentials:
+```bash
+security find-generic-password -a "alpaca_api_key" -s "tlh-agent" -w
+```
+
+To delete credentials:
+```bash
+security delete-generic-password -a "alpaca_api_key" -s "tlh-agent"
+security delete-generic-password -a "alpaca_secret_key" -s "tlh-agent"
+```
+
+**Option B: Environment Variables**
+
+If no keychain credentials are found, the app falls back to environment variables:
 
 ```bash
 export ALPACA_API_KEY="your-key-id"

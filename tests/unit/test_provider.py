@@ -110,19 +110,16 @@ class TestServiceProvider:
         assert "state_path" in status
 
     @patch("tlh_agent.services.provider.AlpacaClient")
+    @patch("tlh_agent.config.get_alpaca_credentials")
     def test_create_with_alpaca(
-        self, mock_alpaca_class: MagicMock, temp_config_dir: Path
+        self,
+        mock_get_creds: MagicMock,
+        mock_alpaca_class: MagicMock,
+        temp_config_dir: Path,
     ) -> None:
         """Test creating provider with Alpaca connection."""
-        from tlh_agent.config import AppConfig
-
-        # Create config with credentials
-        config = AppConfig(
-            config_dir=temp_config_dir,
-            alpaca_api_key="test-key",
-            alpaca_secret_key="test-secret",
-        )
-        config.save()
+        # Mock keychain credentials
+        mock_get_creds.return_value = ("test-key", "test-secret")
 
         # Mock Alpaca client
         mock_alpaca = MagicMock()

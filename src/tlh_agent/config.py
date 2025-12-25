@@ -6,12 +6,7 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from pathlib import Path
 
-
-def _decimal_default(obj):
-    """JSON encoder for Decimal."""
-    if isinstance(obj, Decimal):
-        return str(obj)
-    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+from tlh_agent.credentials import get_alpaca_credentials
 
 
 def _parse_decimal(value: str | int | float | Decimal) -> Decimal:
@@ -56,6 +51,10 @@ class AppConfig:
     def load(cls, config_dir: Path | None = None) -> "AppConfig":
         """Load configuration from file.
 
+        Credentials are loaded from:
+        1. macOS Keychain (preferred)
+        2. Environment variables (ALPACA_API_KEY, ALPACA_SECRET_KEY)
+
         Args:
             config_dir: Optional config directory override.
 
@@ -73,20 +72,24 @@ class AppConfig:
                 data = json.load(f)
                 config = cls._from_dict(data, config_dir)
 
-        # Also check environment variables for API keys
-        if not config.alpaca_api_key:
+        # Load credentials from keychain first
+        keychain_creds = get_alpaca_credentials()
+        if keychain_creds:
+            config.alpaca_api_key, config.alpaca_secret_key = keychain_creds
+        else:
+            # Fall back to environment variables
             config.alpaca_api_key = os.environ.get("ALPACA_API_KEY", "")
-        if not config.alpaca_secret_key:
             config.alpaca_secret_key = os.environ.get("ALPACA_SECRET_KEY", "")
 
         return config
 
     @classmethod
     def _from_dict(cls, data: dict, config_dir: Path) -> "AppConfig":
-        """Create config from dictionary."""
+        """Create config from dictionary.
+
+        Note: Credentials are not loaded from JSON - they come from keychain.
+        """
         return cls(
-            alpaca_api_key=data.get("alpaca_api_key", ""),
-            alpaca_secret_key=data.get("alpaca_secret_key", ""),
             alpaca_paper=data.get("alpaca_paper", True),
             min_loss_usd=_parse_decimal(data.get("min_loss_usd", "100")),
             min_loss_pct=_parse_decimal(data.get("min_loss_pct", "3.0")),
@@ -99,12 +102,13 @@ class AppConfig:
         )
 
     def save(self) -> None:
-        """Save configuration to file."""
+        """Save configuration to file.
+
+        Note: Credentials are stored in the keychain, not in this file.
+        """
         self.config_dir.mkdir(parents=True, exist_ok=True)
 
         data = {
-            "alpaca_api_key": self.alpaca_api_key,
-            "alpaca_secret_key": self.alpaca_secret_key,
             "alpaca_paper": self.alpaca_paper,
             "min_loss_usd": str(self.min_loss_usd),
             "min_loss_pct": str(self.min_loss_pct),
