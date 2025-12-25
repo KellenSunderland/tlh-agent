@@ -54,3 +54,36 @@ def has_alpaca_credentials() -> bool:
         True if both api_key and secret_key are stored.
     """
     return get_alpaca_credentials() is not None
+
+
+def get_claude_api_key() -> str | None:
+    """Get Claude API key from the keychain.
+
+    Returns:
+        API key if found, None otherwise.
+    """
+    return keyring.get_password(SERVICE_NAME, "claude_api_key")
+
+
+def set_claude_api_key(api_key: str) -> None:
+    """Store Claude API key in the keychain.
+
+    Args:
+        api_key: Anthropic API key.
+    """
+    keyring.set_password(SERVICE_NAME, "claude_api_key", api_key)
+
+
+def delete_claude_api_key() -> None:
+    """Remove Claude API key from the keychain."""
+    with contextlib.suppress(keyring.errors.PasswordDeleteError):
+        keyring.delete_password(SERVICE_NAME, "claude_api_key")
+
+
+def has_claude_api_key() -> bool:
+    """Check if Claude API key exists in the keychain.
+
+    Returns:
+        True if api_key is stored.
+    """
+    return get_claude_api_key() is not None

@@ -5,9 +5,13 @@ from unittest.mock import MagicMock, patch
 from tlh_agent.credentials import (
     SERVICE_NAME,
     delete_alpaca_credentials,
+    delete_claude_api_key,
     get_alpaca_credentials,
+    get_claude_api_key,
     has_alpaca_credentials,
+    has_claude_api_key,
     set_alpaca_credentials,
+    set_claude_api_key,
 )
 
 
@@ -98,3 +102,72 @@ class TestCredentials:
         mock_keyring.get_password.return_value = None
 
         assert has_alpaca_credentials() is False
+
+
+class TestClaudeCredentials:
+    """Tests for Claude API key storage functions."""
+
+    @patch("tlh_agent.credentials.keyring")
+    def test_get_claude_api_key_found(self, mock_keyring: MagicMock) -> None:
+        """Test getting API key when it exists."""
+        mock_keyring.get_password.return_value = "sk-ant-test-key"
+
+        result = get_claude_api_key()
+
+        assert result == "sk-ant-test-key"
+        mock_keyring.get_password.assert_called_once_with(SERVICE_NAME, "claude_api_key")
+
+    @patch("tlh_agent.credentials.keyring")
+    def test_get_claude_api_key_not_found(self, mock_keyring: MagicMock) -> None:
+        """Test getting API key when it doesn't exist."""
+        mock_keyring.get_password.return_value = None
+
+        result = get_claude_api_key()
+
+        assert result is None
+
+    @patch("tlh_agent.credentials.keyring")
+    def test_set_claude_api_key(self, mock_keyring: MagicMock) -> None:
+        """Test setting API key."""
+        set_claude_api_key("sk-ant-my-key")
+
+        mock_keyring.set_password.assert_called_once_with(
+            SERVICE_NAME, "claude_api_key", "sk-ant-my-key"
+        )
+
+    @patch("tlh_agent.credentials.keyring")
+    def test_delete_claude_api_key(self, mock_keyring: MagicMock) -> None:
+        """Test deleting API key."""
+        delete_claude_api_key()
+
+        mock_keyring.delete_password.assert_called_once_with(SERVICE_NAME, "claude_api_key")
+
+    @patch("tlh_agent.credentials.keyring")
+    def test_delete_claude_api_key_not_found(self, mock_keyring: MagicMock) -> None:
+        """Test deleting API key when it doesn't exist."""
+        import keyring.errors
+
+        from tlh_agent import credentials
+
+        original_errors = credentials.keyring.errors
+        mock_keyring.errors = keyring.errors
+        mock_keyring.delete_password.side_effect = keyring.errors.PasswordDeleteError()
+
+        # Should not raise
+        delete_claude_api_key()
+
+        credentials.keyring.errors = original_errors
+
+    @patch("tlh_agent.credentials.keyring")
+    def test_has_claude_api_key_true(self, mock_keyring: MagicMock) -> None:
+        """Test has_claude_api_key when API key exists."""
+        mock_keyring.get_password.return_value = "sk-ant-test-key"
+
+        assert has_claude_api_key() is True
+
+    @patch("tlh_agent.credentials.keyring")
+    def test_has_claude_api_key_false(self, mock_keyring: MagicMock) -> None:
+        """Test has_claude_api_key when API key doesn't exist."""
+        mock_keyring.get_password.return_value = None
+
+        assert has_claude_api_key() is False
