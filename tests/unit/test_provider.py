@@ -43,8 +43,13 @@ class TestServiceProvider:
         assert provider.execution is None
         assert provider.is_live is False
 
-    def test_create_without_credentials(self, temp_config_dir: Path) -> None:
+    @patch("tlh_agent.config.get_alpaca_credentials")
+    def test_create_without_credentials(
+        self, mock_get_creds: MagicMock, temp_config_dir: Path
+    ) -> None:
         """Test creating provider without Alpaca credentials."""
+        mock_get_creds.return_value = None
+
         provider = ServiceProvider.create(config_dir=temp_config_dir)
 
         assert provider.alpaca is None

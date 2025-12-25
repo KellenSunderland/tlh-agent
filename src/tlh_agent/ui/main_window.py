@@ -3,8 +3,9 @@
 import tkinter as tk
 from tkinter import ttk
 
+from tlh_agent.services import get_provider
 from tlh_agent.ui.components.nav_sidebar import NavSidebar
-from tlh_agent.ui.theme import Theme
+from tlh_agent.ui.theme import Colors, Fonts, Theme
 
 
 class MainWindow(ttk.Frame):
@@ -33,8 +34,28 @@ class MainWindow(ttk.Frame):
         separator = ttk.Separator(self, orient=tk.VERTICAL)
         separator.pack(side=tk.LEFT, fill=tk.Y)
 
+        # Content wrapper (for banner + screens)
+        content_wrapper = ttk.Frame(self, style="TFrame")
+        content_wrapper.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # Mock data banner (shown when not connected to live data)
+        self._mock_banner: tk.Frame | None = None
+        provider = get_provider()
+        if not provider.is_live:
+            self._mock_banner = tk.Frame(content_wrapper, bg=Colors.WARNING, height=40)
+            self._mock_banner.pack(fill=tk.X)
+            self._mock_banner.pack_propagate(False)
+
+            tk.Label(
+                self._mock_banner,
+                text="DEMO MODE - Displaying sample data. Connect Alpaca API for live data.",
+                font=Fonts.BODY_BOLD,
+                fg=Colors.BG_PRIMARY,
+                bg=Colors.WARNING,
+            ).pack(expand=True)
+
         # Content area
-        self.content_frame = ttk.Frame(self, style="TFrame")
+        self.content_frame = ttk.Frame(content_wrapper, style="TFrame")
         self.content_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         # Initialize screens (lazy loading)

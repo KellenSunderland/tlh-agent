@@ -5,6 +5,7 @@ from tkinter import ttk
 from typing import Any
 
 from tlh_agent.data.mock_data import MockDataFactory, Trade
+from tlh_agent.services import get_provider
 from tlh_agent.ui.base import BaseScreen
 from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.data_table import ColumnDef, DataTable
@@ -172,7 +173,12 @@ class TradeHistoryScreen(BaseScreen):
 
     def refresh(self) -> None:
         """Refresh trade history data."""
-        trades = MockDataFactory.get_trade_history()
+        provider = get_provider()
+
+        if provider.is_live and provider.portfolio:
+            trades = provider.portfolio.get_trade_history()
+        else:
+            trades = MockDataFactory.get_trade_history()
 
         # Build table data
         self._all_trades = []

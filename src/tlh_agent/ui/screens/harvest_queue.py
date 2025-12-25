@@ -5,6 +5,8 @@ from tkinter import ttk
 from typing import Any
 
 from tlh_agent.data.mock_data import HarvestOpportunity, MockDataFactory
+from tlh_agent.services import get_provider
+from tlh_agent.services.scanner import HarvestOpportunity as LiveHarvestOpportunity
 from tlh_agent.ui.base import BaseScreen
 from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.data_table import ColumnDef, DataTable
@@ -192,7 +194,13 @@ class HarvestQueueScreen(BaseScreen):
 
     def refresh(self) -> None:
         """Refresh harvest queue data."""
-        opportunities = MockDataFactory.get_harvest_opportunities()
+        provider = get_provider()
+
+        if provider.is_live and provider.scanner:
+            scan_result = provider.scanner.scan()
+            opportunities = scan_result.opportunities
+        else:
+            opportunities = MockDataFactory.get_harvest_opportunities()
 
         # Update summary
         pending_count = sum(1 for o in opportunities if o.status == "pending")
@@ -247,7 +255,7 @@ class HarvestQueueScreen(BaseScreen):
     def _on_select(self, row: dict[str, Any]) -> None:
         """Handle row selection."""
         opp = row.get("_opportunity")
-        if not isinstance(opp, HarvestOpportunity):
+        if not isinstance(opp, (HarvestOpportunity, LiveHarvestOpportunity)):
             return
 
         self._show_details(opp)
@@ -320,25 +328,50 @@ class HarvestQueueScreen(BaseScreen):
         """Approve selected opportunity."""
         selected = self.table.get_selected()
         if selected:
-            # Would update the opportunity status
-            pass
+            opp = selected.get("_opportunity")
+            if opp and hasattr(opp, "id"):
+                provider = get_provider()
+                if provider.scanner:
+                    provider.scanner.approve_harvest(opp.id)
+                    self.refresh()
 
     def _on_reject(self) -> None:
         """Reject selected opportunity."""
         selected = self.table.get_selected()
         if selected:
-            # Would update the opportunity status
-            pass
+            opp = selected.get("_opportunity")
+            if opp and hasattr(opp, "id"):
+                provider = get_provider()
+                if provider.scanner:
+                    provider.scanner.reject_harvest(opp.id)
+                    self.refresh()
 
     def _on_approve_all(self) -> None:
         """Approve all pending opportunities."""
-        pass
+        provider = get_provider()
+        if provider.scanner:
+            scan_result = provider.scanner.scan()
+            for opp in scan_result.opportunities:
+                if opp.status == "pending":
+                    provider.scanner.approve_harvest(opp.id)
+            self.refresh()
 
     def _on_reject_all(self) -> None:
         """Reject all pending opportunities."""
-        pass
+        provider = get_provider()
+        if provider.scanner:
+            scan_result = provider.scanner.scan()
+            for opp in scan_result.opportunities:
+                if opp.status == "pending":
+                    provider.scanner.reject_harvest(opp.id)
+            self.refresh()
 
     def _on_execute(self) -> None:
         """Execute all approved harvests."""
-        # Would trigger trade execution
-        pass
+        provider = get_provider()
+        if provider.execution and provider.scanner:
+            scan_result = provider.scanner.scan()
+            for opp in scan_result.opportunities:
+                if opp.status == "approved":
+                    provider.execution.execute_harvest(opp)
+            self.refresh()

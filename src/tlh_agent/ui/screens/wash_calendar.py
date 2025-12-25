@@ -6,6 +6,7 @@ from datetime import date
 from tkinter import ttk
 
 from tlh_agent.data.mock_data import MockDataFactory, WashSaleRestriction
+from tlh_agent.services import get_provider
 from tlh_agent.ui.base import BaseScreen
 from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.page_header import PageHeader
@@ -110,7 +111,13 @@ class WashCalendarScreen(BaseScreen):
 
     def refresh(self) -> None:
         """Refresh wash sale calendar data."""
-        self._restrictions = MockDataFactory.get_active_wash_sale_restrictions()
+        provider = get_provider()
+
+        restrictions = provider.wash_sale.get_active_restrictions()
+        if not restrictions:
+            restrictions = MockDataFactory.get_active_wash_sale_restrictions()
+
+        self._restrictions = restrictions
         self._build_calendar()
         self._build_restrictions_list()
 

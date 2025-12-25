@@ -4,6 +4,7 @@ import tkinter as tk
 from decimal import Decimal
 
 from tlh_agent.data.mock_data import MockDataFactory
+from tlh_agent.services import get_provider
 from tlh_agent.ui.base import BaseScreen
 from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.page_header import PageHeader
@@ -68,7 +69,15 @@ class LossLedgerScreen(BaseScreen):
 
     def refresh(self) -> None:
         """Refresh loss ledger data."""
-        ledger_entries = MockDataFactory.get_loss_ledger()
+        provider = get_provider()
+
+        # Get ledger from store, fall back to mock
+        ledger_dict = provider.store.get_loss_ledger()
+        if ledger_dict:
+            # Convert dict to list sorted by year descending
+            ledger_entries = sorted(ledger_dict.values(), key=lambda e: e.year, reverse=True)
+        else:
+            ledger_entries = MockDataFactory.get_loss_ledger()
 
         # Calculate carryforward totals
         # The most recent year's carryforward is the available amount

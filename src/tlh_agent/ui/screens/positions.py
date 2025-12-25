@@ -5,6 +5,7 @@ from decimal import Decimal
 from typing import Any
 
 from tlh_agent.data.mock_data import MockDataFactory, Position
+from tlh_agent.services import get_provider
 from tlh_agent.ui.base import BaseScreen
 from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.data_table import ColumnDef, DataTable
@@ -97,7 +98,12 @@ class PositionsScreen(BaseScreen):
 
     def refresh(self) -> None:
         """Refresh positions data."""
-        positions = MockDataFactory.get_positions()
+        provider = get_provider()
+
+        if provider.is_live and provider.portfolio:
+            positions = provider.portfolio.get_positions()
+        else:
+            positions = MockDataFactory.get_positions()
 
         # Update summary
         total_value = sum(p.market_value for p in positions)

@@ -1,8 +1,10 @@
 """Settings screen for configuring the application."""
 
 import tkinter as tk
+from decimal import Decimal
 from tkinter import ttk
 
+from tlh_agent.services import get_provider
 from tlh_agent.ui.base import BaseScreen
 from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.page_header import PageHeader
@@ -297,16 +299,42 @@ class SettingsScreen(BaseScreen):
         )
 
     def refresh(self) -> None:
-        """Refresh settings data."""
-        # Would load from config file
-        pass
+        """Refresh settings data from config."""
+        provider = get_provider()
+        config = provider.config
+
+        # Load current values into fields
+        self.min_loss_usd.set(str(config.min_loss_usd))
+        self.min_loss_pct.set(str(config.min_loss_pct))
+        self.min_tax_benefit.set(str(config.min_tax_benefit))
+        self.tax_rate.set(str(int(config.tax_rate * 100)))
+        self.min_holding_days.set(str(config.min_holding_days))
+        self.max_harvest_pct.set(str(config.max_harvest_pct))
+        self.wash_window_days.set(str(config.wash_sale_days))
+        self.paper_trading.set(config.alpaca_paper)
 
     def _on_save(self) -> None:
-        """Save settings."""
-        # Would save to config file
-        pass
+        """Save settings to config."""
+        provider = get_provider()
+
+        provider.update_config(
+            min_loss_usd=Decimal(self.min_loss_usd.get()),
+            min_loss_pct=Decimal(self.min_loss_pct.get()),
+            min_tax_benefit=Decimal(self.min_tax_benefit.get()),
+            tax_rate=Decimal(self.tax_rate.get()) / 100,
+            min_holding_days=int(self.min_holding_days.get()),
+            max_harvest_pct=Decimal(self.max_harvest_pct.get()),
+            wash_sale_days=int(self.wash_window_days.get()),
+            alpaca_paper=self.paper_trading.get(),
+        )
 
     def _on_reset(self) -> None:
         """Reset settings to defaults."""
-        # Would reset all fields to default values
-        pass
+        self.min_loss_usd.set("100")
+        self.min_loss_pct.set("3.0")
+        self.min_tax_benefit.set("50")
+        self.tax_rate.set("35")
+        self.min_holding_days.set("7")
+        self.max_harvest_pct.set("10.0")
+        self.wash_window_days.set("30")
+        self.paper_trading.set(True)
