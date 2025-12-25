@@ -386,7 +386,7 @@ The tkinter interface provides:
 
 - **Dashboard** — Portfolio summary, unrealized gains/losses, harvest opportunities
 - **Positions** — Detailed view of all holdings with lot-level cost basis
-- **Harvest Queue** — Pending harvest recommendations awaiting action/confirmation
+- **Trade Queue** — Pending trades (harvests, index buys, rebalances) awaiting approval
 - **Wash Sale Calendar** — Visual timeline of restricted securities
 - **Trade History** — Log of all executed harvests and rebuys
 - **Loss Ledger** — Cumulative harvested losses and carryforward tracking
@@ -525,7 +525,7 @@ uv run pytest tests/ui/ -v
 
 # Screenshots saved to screenshots/ directory
 ls screenshots/
-# 01_dashboard.png  02_positions.png  03_harvest_queue.png ...
+# 01_dashboard.png  02_positions.png  03_trade_queue.png ...
 ```
 
 **Test structure:**

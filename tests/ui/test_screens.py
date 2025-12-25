@@ -123,23 +123,23 @@ class TestPositionsScreen:
             assert ticker in tickers_in_table, f"Ticker {ticker} not in table data"
 
 
-class TestHarvestQueueScreen:
+class TestTradeQueueScreen:
     """Tests for the Trade Queue screen."""
 
-    def test_harvest_queue_loads(self, app, main_window, screenshots_dir):
-        """Test that harvest queue screen loads correctly."""
+    def test_trade_queue_loads(self, app, main_window, screenshots_dir):
+        """Test that trade queue screen loads correctly."""
         main_window._show_screen("harvest")
         app.root.update()
 
-        screenshot_path = screenshots_dir / "harvest_queue.png"
+        screenshot_path = screenshots_dir / "trade_queue.png"
         take_screenshot(app.root, screenshot_path)
 
         screen = main_window._screens.get("harvest")
         assert screen is not None
         assert check_widget_visible(screen)
 
-    def test_harvest_queue_contains_action_buttons(self, app, main_window):
-        """Test harvest queue has action buttons."""
+    def test_trade_queue_contains_action_buttons(self, app, main_window):
+        """Test trade queue has action buttons."""
         main_window._show_screen("harvest")
         app.root.update()
 
@@ -154,10 +154,10 @@ class TestHarvestQueueScreen:
 
         results = check_widget_contains_text(screen, expected_texts)
         for text, found in results.items():
-            assert found, f"Button '{text}' not found in harvest queue"
+            assert found, f"Button '{text}' not found in trade queue"
 
-    def test_harvest_queue_displays_opportunities(self, app, main_window):
-        """Test harvest queue displays mock opportunities."""
+    def test_trade_queue_displays_opportunities(self, app, main_window):
+        """Test trade queue displays mock opportunities."""
         main_window._show_screen("harvest")
         app.root.update()
 
@@ -437,7 +437,7 @@ class TestScreenshotGeneration:
         screens = [
             ("dashboard", "01_dashboard.png"),
             ("positions", "02_positions.png"),
-            ("harvest", "03_harvest_queue.png"),
+            ("harvest", "03_trade_queue.png"),
             ("wash_sales", "04_wash_calendar.png"),
             ("history", "05_trade_history.png"),
             ("ledger", "06_loss_ledger.png"),
