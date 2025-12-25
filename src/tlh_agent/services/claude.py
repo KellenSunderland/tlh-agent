@@ -11,6 +11,14 @@ from pathlib import Path
 from typing import Any
 
 import anthropic
+from anthropic.types import (
+    ContentBlockParam,
+    MessageParam,
+    TextBlockParam,
+    ToolParam,
+    ToolResultBlockParam,
+    ToolUseBlockParam,
+)
 
 # Set up dedicated log file for agent debugging (same as assistant.py)
 LOG_FILE = Path.home() / ".tlh-agent" / "agent.log"
@@ -67,7 +75,7 @@ class ClaudeService:
     model: str = "claude-sonnet-4-5-20250929"
     max_tokens: int = 16384  # Need more tokens to generate 503 trades
     _client: anthropic.AsyncAnthropic = field(init=False, repr=False)
-    _history: list[dict[str, Any]] = field(default_factory=list, repr=False)
+    _history: list[MessageParam] = field(default_factory=list, repr=False)
     _system_prompt: str = field(
         default="""You are the AI assistant for a TAX-LOSS HARVESTING DIRECT INDEXING application.
 
@@ -129,14 +137,14 @@ Be concise in responses.""",
         self._history.append({"role": "user", "content": message})
 
         # Build tools for API
-        api_tools = None
+        api_tools: list[ToolParam] | None = None
         if tools:
             api_tools = [
-                {
-                    "name": tool.name,
-                    "description": tool.description,
-                    "input_schema": tool.input_schema,
-                }
+                ToolParam(
+                    name=tool.name,
+                    description=tool.description,
+                    input_schema=tool.input_schema,
+                )
                 for tool in tools
             ]
             logger.debug(f"Tools provided: {[t.name for t in tools]}")
@@ -145,15 +153,18 @@ Be concise in responses.""",
 
         # Create streaming message
         logger.info(f"Creating streaming message with model={self.model}")
-        async with self._client.messages.stream(
-            model=self.model,
-            max_tokens=self.max_tokens,
-            system=self._system_prompt,
-            messages=self._history,
-            tools=api_tools or anthropic.NOT_GIVEN,
-        ) as stream:
+        stream_kwargs: dict[str, Any] = {
+            "model": self.model,
+            "max_tokens": self.max_tokens,
+            "system": self._system_prompt,
+            "messages": self._history,
+        }
+        if api_tools is not None:
+            stream_kwargs["tools"] = api_tools
+
+        async with self._client.messages.stream(**stream_kwargs) as stream:
             logger.debug("Stream opened successfully")
-            assistant_content: list[dict[str, Any]] = []
+            assistant_content: list[ContentBlockParam] = []
             current_text = ""
             current_tool_use: dict[str, Any] | None = None
             event_count = 0
@@ -173,16 +184,18 @@ Be concise in responses.""",
                         }
 
                 elif event.type == "content_block_delta":
-                    if hasattr(event.delta, "text"):
-                        current_text += event.delta.text
-                        yield StreamEvent(type="text", text=event.delta.text)
-                    elif hasattr(event.delta, "partial_json"):
+                    delta = event.delta
+                    if hasattr(delta, "text"):
+                        text_chunk = str(getattr(delta, "text", ""))
+                        current_text += text_chunk
+                        yield StreamEvent(type="text", text=text_chunk)
+                    elif hasattr(delta, "partial_json"):
                         # Tool input is streamed as partial JSON
                         pass
 
                 elif event.type == "content_block_stop":
                     if current_text:
-                        assistant_content.append({"type": "text", "text": current_text})
+                        assistant_content.append(TextBlockParam(type="text", text=current_text))
                     if current_tool_use:
                         # Get the full tool input from the accumulated message
                         pass
@@ -206,12 +219,12 @@ Be concise in responses.""",
                             )
                             logger.debug(f"Yielded tool_use StreamEvent for {block.name}")
                             assistant_content.append(
-                                {
-                                    "type": "tool_use",
-                                    "id": block.id,
-                                    "name": block.name,
-                                    "input": dict(block.input),
-                                }
+                                ToolUseBlockParam(
+                                    type="tool_use",
+                                    id=block.id,
+                                    name=block.name,
+                                    input=dict(block.input),
+                                )
                             )
 
                     # Add assistant message to history
@@ -243,18 +256,14 @@ Be concise in responses.""",
         logger.debug(f"Tool use ID: {tool_use_id}")
         logger.debug(f"Result length: {len(result)}")
         logger.debug(f"Is error: {is_error}")
+        tool_result_block = ToolResultBlockParam(
+            type="tool_result",
+            tool_use_id=tool_use_id,
+            content=result,
+            is_error=is_error,
+        )
         self._history.append(
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "tool_result",
-                        "tool_use_id": tool_use_id,
-                        "content": result,
-                        "is_error": is_error,
-                    }
-                ],
-            }
+            MessageParam(role="user", content=[tool_result_block])
         )
         logger.debug("Tool result added to history")
 
@@ -267,7 +276,7 @@ Be concise in responses.""",
             messages=self._history,
         ) as stream:
             logger.debug("Tool result stream opened successfully")
-            assistant_content: list[dict[str, Any]] = []
+            assistant_content: list[ContentBlockParam] = []
             current_text = ""
             event_count = 0
 
@@ -279,13 +288,15 @@ Be concise in responses.""",
                         current_text = ""
 
                 elif event.type == "content_block_delta":
-                    if hasattr(event.delta, "text"):
-                        current_text += event.delta.text
-                        yield StreamEvent(type="text", text=event.delta.text)
+                    delta = event.delta
+                    if hasattr(delta, "text"):
+                        text_chunk = str(getattr(delta, "text", ""))
+                        current_text += text_chunk
+                        yield StreamEvent(type="text", text=text_chunk)
 
                 elif event.type == "content_block_stop":
                     if current_text:
-                        assistant_content.append({"type": "text", "text": current_text})
+                        assistant_content.append(TextBlockParam(type="text", text=current_text))
 
                 elif event.type == "message_stop":
                     # Get final message to check for more tool uses
@@ -303,12 +314,12 @@ Be concise in responses.""",
                                 tool_use_id=block.id,
                             )
                             assistant_content.append(
-                                {
-                                    "type": "tool_use",
-                                    "id": block.id,
-                                    "name": block.name,
-                                    "input": dict(block.input),
-                                }
+                                ToolUseBlockParam(
+                                    type="tool_use",
+                                    id=block.id,
+                                    name=block.name,
+                                    input=dict(block.input),
+                                )
                             )
 
                     if assistant_content:

@@ -447,7 +447,7 @@ class ClaudeToolProvider:
         try:
             # Get current positions
             positions = self._portfolio_service.get_positions()
-            portfolio_value = sum(p.market_value for p in positions)
+            portfolio_value = sum((p.market_value for p in positions), Decimal(0))
 
             # Get index constituents
             from tlh_agent.services.index import Position as IndexPosition
