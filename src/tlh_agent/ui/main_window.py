@@ -132,9 +132,13 @@ class MainWindow(ttk.Frame):
         }
 
         for name, screen_class in screen_classes.items():
-            # Pass trade_queue to HarvestQueueScreen
+            # Pass trade_queue and navigation callback to TradeQueueScreen
             if name == "harvest":
-                screen = screen_class(self.content_frame, trade_queue=self._trade_queue)
+                screen = screen_class(
+                    self.content_frame,
+                    trade_queue=self._trade_queue,
+                    on_navigate_to_dashboard=self._navigate_to_dashboard,
+                )
             else:
                 screen = screen_class(self.content_frame)
             self._screens[name] = screen
@@ -173,6 +177,10 @@ class MainWindow(ttk.Frame):
             screen.refresh()
             self._current_screen = screen_name
             self.sidebar.set_active(screen_name)
+
+    def _navigate_to_dashboard(self) -> None:
+        """Navigate to dashboard and refresh to show updated positions."""
+        self._show_screen("dashboard")
 
     def _toggle_assistant(self) -> None:
         """Toggle the assistant pane visibility."""

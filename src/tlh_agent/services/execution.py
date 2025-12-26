@@ -1,5 +1,6 @@
 """Trade execution service for tax-loss harvesting."""
 
+import logging
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
@@ -7,7 +8,10 @@ from enum import Enum
 
 from tlh_agent.brokers.alpaca import AlpacaClient
 from tlh_agent.data.local_store import HarvestQueueItem, LocalStore
+from tlh_agent.services.trade_queue import QueuedTrade, TradeAction
 from tlh_agent.services.wash_sale import WashSaleService
+
+logger = logging.getLogger(__name__)
 
 
 class ExecutionStatus(Enum):
@@ -209,6 +213,66 @@ class HarvestExecutionService:
             restriction_id: ID of the wash sale restriction.
         """
         self._wash_sale.mark_rebuy_skipped(restriction_id)
+
+    def execute_queued_trade(self, trade: QueuedTrade) -> ExecutionResult:
+        """Execute a queued trade (buy or sell).
+
+        Handles trades from the trade queue service (index buys, rebalances, etc.)
+
+        Args:
+            trade: The approved trade to execute.
+
+        Returns:
+            ExecutionResult with trade details.
+        """
+        side = "buy" if trade.action == TradeAction.BUY else "sell"
+        logger.info(
+            f"EXECUTE: {side.upper()} {trade.shares} {trade.symbol} @ ~${trade.current_price}"
+        )
+
+        try:
+            # Submit market order based on action
+            order = self._alpaca.submit_market_order(
+                symbol=trade.symbol,
+                qty=trade.shares,
+                side=side,
+            )
+
+            # Check if order was filled immediately
+            if order.status != "filled":
+                logger.warning(f"  -> PENDING: order {order.id} status={order.status}")
+                return ExecutionResult(
+                    status=ExecutionStatus.PENDING,
+                    order_id=order.id,
+                    ticker=trade.symbol,
+                    shares=trade.shares,
+                )
+
+            # Calculate total value
+            fill_price = order.filled_avg_price or Decimal("0")
+            total_value = order.filled_qty * fill_price
+
+            logger.info(
+                f"  -> SUCCESS: filled {order.filled_qty} @ ${fill_price} = ${total_value:.2f}"
+            )
+
+            return ExecutionResult(
+                status=ExecutionStatus.SUCCESS,
+                order_id=order.id,
+                ticker=trade.symbol,
+                shares=order.filled_qty,
+                price=fill_price,
+                total_value=total_value,
+            )
+
+        except Exception as e:
+            logger.error(f"  -> FAILED: {e}")
+            return ExecutionResult(
+                status=ExecutionStatus.FAILED,
+                ticker=trade.symbol,
+                shares=trade.shares,
+                error_message=str(e),
+            )
 
     def get_pending_rebuys(self) -> list:
         """Get restrictions ready for rebuy.

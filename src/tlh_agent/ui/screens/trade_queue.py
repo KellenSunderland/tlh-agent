@@ -7,13 +7,16 @@ Displays trades from multiple sources:
 """
 
 import tkinter as tk
-from tkinter import ttk
+from collections.abc import Callable
+from decimal import Decimal
+from tkinter import messagebox, ttk
 from typing import Any
 
 from tlh_agent.data.mock_data import HarvestOpportunity, MockDataFactory
 from tlh_agent.services import get_provider
+from tlh_agent.services.execution import ExecutionStatus
 from tlh_agent.services.scanner import HarvestOpportunity as LiveHarvestOpportunity
-from tlh_agent.services.trade_queue import TradeQueueService
+from tlh_agent.services.trade_queue import TradeQueueService, TradeStatus
 from tlh_agent.ui.base import BaseScreen
 from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.data_table import ColumnDef, DataTable
@@ -28,17 +31,21 @@ class TradeQueueScreen(BaseScreen):
         self,
         parent: tk.Widget,
         trade_queue: TradeQueueService | None = None,
+        on_navigate_to_dashboard: Callable[[], None] | None = None,
     ) -> None:
         """Initialize the screen.
 
         Args:
             parent: The parent widget.
             trade_queue: Trade queue service for assistant-added trades.
+            on_navigate_to_dashboard: Callback to navigate to dashboard and refresh.
         """
         self._trade_queue = trade_queue
+        self._on_navigate_to_dashboard = on_navigate_to_dashboard
         self._all_table_data: list[dict] = []  # Unfiltered data
         self._last_trade_count = 0  # Track trade count for auto-refresh
         self._refresh_job: str | None = None
+        self._progress_window: tk.Toplevel | None = None
         super().__init__(parent)
         self._schedule_auto_refresh()
 
@@ -532,16 +539,219 @@ class TradeQueueScreen(BaseScreen):
         self.refresh()
 
     def _on_execute(self) -> None:
-        """Execute all approved trades."""
+        """Execute all approved trades with progress feedback."""
         provider = get_provider()
 
-        # Execute approved harvests
-        if provider.execution and provider.scanner:
+        if not provider.execution:
+            messagebox.showerror(
+                "Error", "Execution service not available. Check Alpaca connection."
+            )
+            return
+
+        # Collect all approved trades
+        approved_harvests = []
+        if provider.scanner:
             scan_result = provider.scanner.scan()
-            for opp in scan_result.opportunities:
-                if opp.status == "approved":
-                    provider.execution.execute_harvest(opp)
+            approved_harvests = [o for o in scan_result.opportunities if o.status == "approved"]
 
-        # TODO: Execute approved queued trades via broker
+        approved_queued = []
+        if self._trade_queue:
+            approved_queued = self._trade_queue.get_trades_by_status(TradeStatus.APPROVED)
 
+        total_trades = len(approved_harvests) + len(approved_queued)
+
+        if total_trades == 0:
+            messagebox.showinfo("No Trades", "No approved trades to execute. Approve trades first.")
+            return
+
+        # Show progress window
+        self._show_progress_window(total_trades)
+
+        # Track results
+        results = {
+            "success": 0,
+            "failed": 0,
+            "pending": 0,
+            "total_value": Decimal("0"),
+            "errors": [],
+        }
+
+        current = 0
+
+        # Execute harvest opportunities
+        for opp in approved_harvests:
+            current += 1
+            self._update_progress(current, total_trades, opp.ticker, "Selling")
+
+            result = provider.execution.execute_harvest(opp)
+
+            if result.status == ExecutionStatus.SUCCESS:
+                results["success"] += 1
+                results["total_value"] += result.total_value
+            elif result.status == ExecutionStatus.PENDING:
+                results["pending"] += 1
+            else:
+                results["failed"] += 1
+                results["errors"].append(f"{opp.ticker}: {result.error_message}")
+
+        # Execute queued trades
+        for trade in approved_queued:
+            current += 1
+            action = "Buying" if trade.action.value == "buy" else "Selling"
+            self._update_progress(current, total_trades, trade.symbol, action)
+
+            result = provider.execution.execute_queued_trade(trade)
+
+            if result.status == ExecutionStatus.SUCCESS:
+                self._trade_queue.mark_executed(trade.id, result.price)
+                results["success"] += 1
+                results["total_value"] += result.total_value
+            elif result.status == ExecutionStatus.PENDING:
+                results["pending"] += 1
+            else:
+                self._trade_queue.mark_failed(trade.id, result.error_message or "Unknown error")
+                results["failed"] += 1
+                results["errors"].append(f"{trade.symbol}: {result.error_message}")
+
+        # Close progress window
+        self._close_progress_window()
+
+        # Show summary
+        self._show_execution_summary(results)
+
+        # Refresh this screen
         self.refresh()
+
+    def _show_progress_window(self, total: int) -> None:
+        """Show execution progress window."""
+        self._progress_window = tk.Toplevel(self)
+        self._progress_window.title("Executing Trades")
+        self._progress_window.geometry("400x200")
+        self._progress_window.resizable(False, False)
+        self._progress_window.transient(self.winfo_toplevel())
+        self._progress_window.grab_set()
+
+        # Center on parent
+        self._progress_window.update_idletasks()
+        x = self.winfo_toplevel().winfo_x() + (self.winfo_toplevel().winfo_width() - 400) // 2
+        y = self.winfo_toplevel().winfo_y() + (self.winfo_toplevel().winfo_height() - 200) // 2
+        self._progress_window.geometry(f"+{x}+{y}")
+
+        frame = tk.Frame(self._progress_window, bg=Colors.BG_PRIMARY, padx=20, pady=20)
+        frame.pack(fill=tk.BOTH, expand=True)
+
+        self._progress_title = tk.Label(
+            frame,
+            text="Executing Trades...",
+            font=Fonts.HEADING,
+            fg=Colors.TEXT_PRIMARY,
+            bg=Colors.BG_PRIMARY,
+        )
+        self._progress_title.pack(pady=(0, 15))
+
+        self._progress_label = tk.Label(
+            frame,
+            text=f"0 / {total}",
+            font=Fonts.BODY_BOLD,
+            fg=Colors.ACCENT,
+            bg=Colors.BG_PRIMARY,
+        )
+        self._progress_label.pack(pady=(0, 10))
+
+        self._progress_bar = ttk.Progressbar(
+            frame,
+            length=350,
+            mode="determinate",
+            maximum=total,
+        )
+        self._progress_bar.pack(pady=(0, 10))
+
+        self._progress_current = tk.Label(
+            frame,
+            text="Preparing...",
+            font=Fonts.BODY,
+            fg=Colors.TEXT_SECONDARY,
+            bg=Colors.BG_PRIMARY,
+        )
+        self._progress_current.pack()
+
+        self._progress_stats = tk.Label(
+            frame,
+            text="Success: 0  |  Failed: 0",
+            font=Fonts.CAPTION,
+            fg=Colors.TEXT_MUTED,
+            bg=Colors.BG_PRIMARY,
+        )
+        self._progress_stats.pack(pady=(10, 0))
+
+        self._progress_window.update()
+
+    def _update_progress(self, current: int, total: int, symbol: str, action: str) -> None:
+        """Update progress window."""
+        if not self._progress_window:
+            return
+
+        self._progress_label.configure(text=f"{current} / {total}")
+        self._progress_bar["value"] = current
+        self._progress_current.configure(text=f"{action} {symbol}...")
+        self._progress_window.update()
+
+    def _close_progress_window(self) -> None:
+        """Close progress window."""
+        if self._progress_window:
+            self._progress_window.destroy()
+            self._progress_window = None
+
+    def _show_execution_summary(self, results: dict) -> None:
+        """Show execution summary dialog."""
+        success = results["success"]
+        failed = results["failed"]
+        pending = results["pending"]
+        total_value = results["total_value"]
+        errors = results["errors"]
+
+        # Build message
+        if success > 0 and failed == 0:
+            title = "Execution Complete"
+            icon = "info"
+            msg = f"{success} trade(s) executed successfully!\n\n"
+            msg += f"Total value: ${total_value:,.2f}"
+        elif failed > 0 and success > 0:
+            title = "Execution Partially Complete"
+            icon = "warning"
+            msg = f"{success} succeeded, {failed} failed\n\n"
+            msg += f"Total value: ${total_value:,.2f}\n\n"
+            msg += "Errors:\n" + "\n".join(errors[:5])
+            if len(errors) > 5:
+                msg += f"\n... and {len(errors) - 5} more"
+        elif failed > 0:
+            title = "Execution Failed"
+            icon = "error"
+            msg = f"All {failed} trade(s) failed.\n\n"
+            msg += "Errors:\n" + "\n".join(errors[:5])
+            if len(errors) > 5:
+                msg += f"\n... and {len(errors) - 5} more"
+        else:
+            title = "No Trades Executed"
+            icon = "info"
+            msg = "No trades were executed."
+
+        if pending > 0:
+            msg += f"\n\n{pending} order(s) are pending fill."
+
+        # Show dialog with option to view positions
+        if success > 0:
+            result = messagebox.askyesno(
+                title,
+                msg + "\n\nView updated positions on Dashboard?",
+                icon=icon,
+            )
+            if result and self._on_navigate_to_dashboard:
+                self._on_navigate_to_dashboard()
+        else:
+            if icon == "error":
+                messagebox.showerror(title, msg)
+            elif icon == "warning":
+                messagebox.showwarning(title, msg)
+            else:
+                messagebox.showinfo(title, msg)
