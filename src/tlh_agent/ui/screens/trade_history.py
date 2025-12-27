@@ -1,16 +1,19 @@
 """Trade history screen showing executed trades."""
 
+import logging
 import tkinter as tk
 from tkinter import ttk
 from typing import Any
 
-from tlh_agent.data.mock_data import MockDataFactory, Trade
 from tlh_agent.services import get_provider
+from tlh_agent.services.portfolio import Trade
 from tlh_agent.ui.base import BaseScreen
 from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.data_table import ColumnDef, DataTable
 from tlh_agent.ui.components.page_header import PageHeader
 from tlh_agent.ui.theme import Colors, Fonts, Spacing
+
+logger = logging.getLogger(__name__)
 
 
 class TradeHistoryScreen(BaseScreen):
@@ -172,13 +175,12 @@ class TradeHistoryScreen(BaseScreen):
         self._all_trades: list[dict[str, Any]] = []
 
     def refresh(self) -> None:
-        """Refresh trade history data."""
+        """Refresh trade history data from Alpaca."""
         provider = get_provider()
 
-        if provider.is_live and provider.portfolio:
+        trades = []
+        if provider.portfolio:
             trades = provider.portfolio.get_trade_history()
-        else:
-            trades = MockDataFactory.get_trade_history()
 
         # Build table data
         self._all_trades = []

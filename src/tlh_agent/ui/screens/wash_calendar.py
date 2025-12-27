@@ -1,16 +1,19 @@
 """Wash sale calendar screen showing restriction windows."""
 
 import calendar
+import logging
 import tkinter as tk
 from datetime import date
 from tkinter import ttk
 
-from tlh_agent.data.mock_data import MockDataFactory, WashSaleRestriction
+from tlh_agent.data.local_store import WashSaleRestriction
 from tlh_agent.services import get_provider
 from tlh_agent.ui.base import BaseScreen
 from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.page_header import PageHeader
 from tlh_agent.ui.theme import Colors, Fonts, Spacing
+
+logger = logging.getLogger(__name__)
 
 
 class WashCalendarScreen(BaseScreen):
@@ -110,14 +113,11 @@ class WashCalendarScreen(BaseScreen):
         self._restrictions: list[WashSaleRestriction] = []
 
     def refresh(self) -> None:
-        """Refresh wash sale calendar data."""
+        """Refresh wash sale calendar data from local store."""
         provider = get_provider()
 
-        restrictions = provider.wash_sale.get_active_restrictions()
-        if not restrictions:
-            restrictions = MockDataFactory.get_active_wash_sale_restrictions()
-
-        self._restrictions = restrictions
+        # Get restrictions from local store (wash_sale service)
+        self._restrictions = provider.wash_sale.get_active_restrictions()
         self._build_calendar()
         self._build_restrictions_list()
 
@@ -207,7 +207,8 @@ class WashCalendarScreen(BaseScreen):
                 bg = Colors.SUCCESS
                 fg = Colors.TEXT_PRIMARY
                 break
-            elif restriction.restriction_start <= check_date <= restriction.restriction_end:
+            # Restriction is active from sale date to restriction_end
+            elif restriction.sale_date <= check_date <= restriction.restriction_end:
                 bg = Colors.WARNING
                 fg = Colors.BG_PRIMARY
                 break
@@ -220,8 +221,8 @@ class WashCalendarScreen(BaseScreen):
         for widget in self.restrictions_list.winfo_children():
             widget.destroy()
 
-        active = [r for r in self._restrictions if r.status == "active"]
-        expired = [r for r in self._restrictions if r.status == "expired"]
+        active = [r for r in self._restrictions if r.is_active]
+        expired = [r for r in self._restrictions if not r.is_active]
 
         if not active and not expired:
             tk.Label(

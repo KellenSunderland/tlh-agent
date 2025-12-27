@@ -6,22 +6,24 @@ Displays trades from multiple sources:
 - Rebalance trades (drift correction)
 """
 
+import logging
 import tkinter as tk
 from collections.abc import Callable
 from decimal import Decimal
 from tkinter import messagebox, ttk
 from typing import Any
 
-from tlh_agent.data.mock_data import HarvestOpportunity, MockDataFactory
 from tlh_agent.services import get_provider
 from tlh_agent.services.execution import ExecutionStatus
-from tlh_agent.services.scanner import HarvestOpportunity as LiveHarvestOpportunity
+from tlh_agent.services.scanner import HarvestOpportunity
 from tlh_agent.services.trade_queue import TradeQueueService, TradeStatus
 from tlh_agent.ui.base import BaseScreen
 from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.data_table import ColumnDef, DataTable
 from tlh_agent.ui.components.page_header import PageHeader
 from tlh_agent.ui.theme import Colors, Fonts, Spacing
+
+logger = logging.getLogger(__name__)
 
 
 class TradeQueueScreen(BaseScreen):
@@ -258,16 +260,15 @@ class TradeQueueScreen(BaseScreen):
         self.details_label.pack(fill=tk.X)
 
     def refresh(self) -> None:
-        """Refresh harvest queue data."""
+        """Refresh harvest queue data from Alpaca."""
         provider = get_provider()
         table_data = []
 
         # Get harvest opportunities from scanner
-        if provider.is_live and provider.scanner:
+        opportunities = []
+        if provider.scanner:
             scan_result = provider.scanner.scan()
             opportunities = scan_result.opportunities
-        else:
-            opportunities = MockDataFactory.get_harvest_opportunities()
 
         # Add harvest opportunities to table
         for opp in opportunities:
@@ -393,7 +394,7 @@ class TradeQueueScreen(BaseScreen):
     def _on_select(self, row: dict[str, Any]) -> None:
         """Handle row selection."""
         opp = row.get("_opportunity")
-        if not isinstance(opp, (HarvestOpportunity, LiveHarvestOpportunity)):
+        if not isinstance(opp, HarvestOpportunity):
             return
 
         self._show_details(opp)

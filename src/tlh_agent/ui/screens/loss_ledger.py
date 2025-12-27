@@ -1,14 +1,16 @@
 """Loss ledger screen tracking cumulative harvested losses."""
 
+import logging
 import tkinter as tk
 from decimal import Decimal
 
-from tlh_agent.data.mock_data import MockDataFactory
 from tlh_agent.services import get_provider
 from tlh_agent.ui.base import BaseScreen
 from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.page_header import PageHeader
 from tlh_agent.ui.theme import Colors, Fonts, Spacing
+
+logger = logging.getLogger(__name__)
 
 
 class LossLedgerScreen(BaseScreen):
@@ -68,16 +70,13 @@ class LossLedgerScreen(BaseScreen):
         self.year_table_frame = year_card.content
 
     def refresh(self) -> None:
-        """Refresh loss ledger data."""
+        """Refresh loss ledger data from local store."""
         provider = get_provider()
 
-        # Get ledger from store, fall back to mock
+        # Get ledger from local store
         ledger_dict = provider.store.get_loss_ledger()
-        if ledger_dict:
-            # Convert dict to list sorted by year descending
-            ledger_entries = sorted(ledger_dict.values(), key=lambda e: e.year, reverse=True)
-        else:
-            ledger_entries = MockDataFactory.get_loss_ledger()
+        # Convert dict to list sorted by year descending
+        ledger_entries = sorted(ledger_dict.values(), key=lambda e: e.year, reverse=True)
 
         # Calculate carryforward totals
         # The most recent year's carryforward is the available amount

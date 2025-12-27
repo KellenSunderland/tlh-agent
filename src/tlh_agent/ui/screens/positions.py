@@ -1,16 +1,18 @@
 """Positions screen showing all portfolio holdings with lot details."""
 
+import logging
 import tkinter as tk
-from decimal import Decimal
 from typing import Any
 
-from tlh_agent.data.mock_data import MockDataFactory, Position
 from tlh_agent.services import get_provider
+from tlh_agent.services.portfolio import Position
 from tlh_agent.ui.base import BaseScreen
 from tlh_agent.ui.components.card import Card
 from tlh_agent.ui.components.data_table import ColumnDef, DataTable
 from tlh_agent.ui.components.page_header import PageHeader
 from tlh_agent.ui.theme import Colors, Fonts, Spacing
+
+logger = logging.getLogger(__name__)
 
 
 class PositionsScreen(BaseScreen):
@@ -97,29 +99,19 @@ class PositionsScreen(BaseScreen):
         self.details_label.pack(fill=tk.X)
 
     def refresh(self) -> None:
-        """Refresh positions data."""
+        """Refresh positions data from Alpaca."""
         provider = get_provider()
 
-        if provider.is_live and provider.portfolio:
-            positions = provider.portfolio.get_positions()
-        else:
-            positions = MockDataFactory.get_positions()
+        if not provider.is_live or not provider.portfolio:
+            logger.warning("POSITIONS: Alpaca not connected")
+            self._show_not_connected()
+            return
 
-        # Helper to get cost basis (different attr names in live vs mock)
-        def get_cost(p: Any) -> Decimal:
-            return getattr(p, "total_cost_basis", None) or getattr(p, "cost_basis", Decimal(0))
-
-        def get_shares(p: Any) -> Decimal:
-            return getattr(p, "total_shares", None) or getattr(p, "shares", Decimal(0))
-
-        def get_gain_loss(p: Any) -> Decimal:
-            return getattr(p, "unrealized_gain_loss", None) or getattr(
-                p, "unrealized_pl", Decimal(0)
-            )
+        positions = provider.portfolio.get_positions()
 
         # Update summary
         total_value = sum(p.market_value for p in positions)
-        total_cost = sum(get_cost(p) for p in positions)
+        total_cost = sum(p.cost_basis for p in positions)
         total_gain = total_value - total_cost
 
         self.summary_labels["total_value"].configure(text=f"${total_value:,.2f}")
@@ -132,38 +124,41 @@ class PositionsScreen(BaseScreen):
         # Build table data
         table_data = []
         for pos in positions:
-            cost_basis = get_cost(pos)
-            shares = get_shares(pos)
-            gain_loss = get_gain_loss(pos)
-            gain_loss_pct = (gain_loss / cost_basis * 100) if cost_basis else Decimal(0)
-
             status = ""
             tag = ""
-            if getattr(pos, "wash_sale_until", None):
+            if pos.wash_sale_until:
                 status = "Wash Sale"
                 tag = "muted"
-            elif gain_loss < 0:
+            elif pos.unrealized_gain_loss < 0:
                 tag = "loss"
-            elif gain_loss > 0:
+            elif pos.unrealized_gain_loss > 0:
                 tag = "gain"
 
             table_data.append(
                 {
                     "ticker": pos.ticker,
                     "name": pos.name,
-                    "shares": f"{shares:,.2f}",
+                    "shares": f"{pos.shares:,.2f}",
                     "current_price": f"${pos.current_price:,.2f}",
                     "market_value": f"${pos.market_value:,.2f}",
-                    "cost_basis": f"${cost_basis:,.2f}",
-                    "gain_loss": f"${gain_loss:+,.2f}",
-                    "gain_loss_pct": f"{gain_loss_pct:+.1f}%",
+                    "cost_basis": f"${pos.cost_basis:,.2f}",
+                    "gain_loss": f"${pos.unrealized_gain_loss:+,.2f}",
+                    "gain_loss_pct": f"{pos.unrealized_gain_loss_pct:+.1f}%",
                     "status": status,
                     "tag": tag,
-                    "_position": pos,  # Store original position for details
+                    "_position": pos,
                 }
             )
 
         self.table.set_data(table_data)
+
+    def _show_not_connected(self) -> None:
+        """Show UI state when Alpaca is not connected."""
+        self.summary_labels["total_value"].configure(text="--")
+        self.summary_labels["total_cost"].configure(text="--")
+        self.summary_labels["total_gain"].configure(text="--")
+        self.summary_labels["positions"].configure(text="--")
+        self.table.set_data([])
 
     def _on_position_select(self, row: dict[str, Any]) -> None:
         """Handle position row selection.
@@ -187,10 +182,10 @@ class PositionsScreen(BaseScreen):
         pass
 
     def _show_lot_details(self, position: Position) -> None:
-        """Show lot details for a position.
+        """Show position details.
 
         Args:
-            position: The position to show lot details for.
+            position: The position to show details for.
         """
         # Clear existing details
         for widget in self.details_frame.winfo_children():
@@ -199,7 +194,7 @@ class PositionsScreen(BaseScreen):
         # Header
         header = tk.Label(
             self.details_frame,
-            text=f"Lot Details - {position.ticker}",
+            text=f"Position Details - {position.ticker}",
             font=Fonts.BODY_BOLD,
             fg=Colors.TEXT_PRIMARY,
             bg=Colors.BG_SECONDARY,
@@ -207,71 +202,44 @@ class PositionsScreen(BaseScreen):
         )
         header.pack(fill=tk.X, padx=Spacing.MD, pady=(Spacing.SM, Spacing.XS))
 
-        # Lot table header
-        lot_header = tk.Frame(self.details_frame, bg=Colors.BG_SECONDARY)
-        lot_header.pack(fill=tk.X, padx=Spacing.MD)
+        # Position summary (Alpaca doesn't provide lot-level data)
+        details = [
+            ("Shares", f"{position.shares:,.2f}"),
+            ("Avg Cost", f"${position.avg_cost_per_share:,.2f}"),
+            ("Cost Basis", f"${position.cost_basis:,.2f}"),
+            ("Current Price", f"${position.current_price:,.2f}"),
+            ("Market Value", f"${position.market_value:,.2f}"),
+            ("Unrealized G/L", f"${position.unrealized_gain_loss:+,.2f}"),
+        ]
 
-        headers = ["Shares", "Cost/Share", "Total Cost", "Acquired", "Holding Period", "G/L"]
-        widths = [80, 100, 100, 100, 100, 100]
+        for label, value in details:
+            row = tk.Frame(self.details_frame, bg=Colors.BG_SECONDARY)
+            row.pack(fill=tk.X, padx=Spacing.MD, pady=1)
 
-        for h, w in zip(headers, widths, strict=False):
             tk.Label(
-                lot_header,
-                text=h,
+                row,
+                text=label,
                 font=Fonts.CAPTION,
                 fg=Colors.TEXT_MUTED,
                 bg=Colors.BG_SECONDARY,
-                width=w // 8,
+                width=15,
                 anchor=tk.W,
-            ).pack(side=tk.LEFT, padx=2)
+            ).pack(side=tk.LEFT)
 
-        # Lot rows
-        for lot in position.lots:
-            lot_row = tk.Frame(self.details_frame, bg=Colors.BG_SECONDARY)
-            lot_row.pack(fill=tk.X, padx=Spacing.MD)
+            color = Colors.TEXT_PRIMARY
+            if "+" in value and "$" in value:
+                color = Colors.SUCCESS_TEXT
+            elif "-" in value and "$" in value:
+                color = Colors.DANGER_TEXT
 
-            gain_loss = (position.current_price - lot.cost_per_share) * lot.shares
-            holding_days = (
-                (lot.acquired_date.today() - lot.acquired_date).days
-                if hasattr(lot.acquired_date, "today")
-                else 0
-            )
-
-            # Recalculate holding period properly
-            from datetime import date
-
-            holding_days = (date.today() - lot.acquired_date).days
-            holding_text = f"{holding_days}d"
-            if holding_days > 365:
-                holding_text += " (LT)"
-            else:
-                holding_text += " (ST)"
-
-            values = [
-                f"{lot.shares:,.2f}",
-                f"${lot.cost_per_share:,.2f}",
-                f"${lot.total_cost_basis:,.2f}",
-                lot.acquired_date.strftime("%Y-%m-%d"),
-                holding_text,
-                f"${gain_loss:+,.2f}",
-            ]
-
-            for val, w in zip(values, widths, strict=False):
-                color = Colors.TEXT_PRIMARY
-                if "+" in val and "$" in val:
-                    color = Colors.SUCCESS_TEXT
-                elif "-" in val and "$" in val:
-                    color = Colors.DANGER_TEXT
-
-                tk.Label(
-                    lot_row,
-                    text=val,
-                    font=Fonts.BODY,
-                    fg=color,
-                    bg=Colors.BG_SECONDARY,
-                    width=w // 8,
-                    anchor=tk.W,
-                ).pack(side=tk.LEFT, padx=2)
+            tk.Label(
+                row,
+                text=value,
+                font=Fonts.BODY,
+                fg=color,
+                bg=Colors.BG_SECONDARY,
+                anchor=tk.W,
+            ).pack(side=tk.LEFT)
 
         # Bottom padding
         tk.Frame(self.details_frame, bg=Colors.BG_SECONDARY, height=Spacing.SM).pack()
