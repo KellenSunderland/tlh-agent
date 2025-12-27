@@ -36,10 +36,11 @@ def mock_alpaca() -> MagicMock:
     mock = MagicMock(spec=AlpacaClient)
 
     # Mock account
+    # equity should match sum of positions for test consistency
     mock.get_account.return_value = AlpacaAccount(
         id="test-account",
         status="ACTIVE",
-        equity=Decimal("100000.00"),
+        equity=Decimal("22000.00"),  # 15500 + 6500 = sum of positions
         cash=Decimal("10000.00"),
         buying_power=Decimal("20000.00"),
     )

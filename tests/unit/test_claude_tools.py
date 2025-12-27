@@ -153,7 +153,7 @@ class TestClaudeToolProvider:
         """Test getting tool definitions."""
         definitions = provider.get_tool_definitions()
 
-        assert len(definitions) == 10
+        assert len(definitions) == 11
         names = [d.name for d in definitions]
         assert ToolName.GET_PORTFOLIO_SUMMARY.value in names
         assert ToolName.GET_POSITIONS.value in names
@@ -165,6 +165,7 @@ class TestClaudeToolProvider:
         assert ToolName.BUY_INDEX.value in names
         assert ToolName.CLEAR_TRADE_QUEUE.value in names
         assert ToolName.REMOVE_TRADE.value in names
+        assert ToolName.REBALANCE_TO_TARGET.value in names
 
     def test_get_portfolio_summary(
         self,
