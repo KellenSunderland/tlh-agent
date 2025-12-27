@@ -219,6 +219,8 @@ class IndexService:
             ticker = str(row[ticker_col]).strip()
             if not ticker or ticker == "nan" or len(ticker) > 5:
                 continue  # Skip invalid rows
+            if not ticker.isalnum() and "." not in ticker:
+                continue  # Skip non-alphanumeric (e.g., "-" for cash positions)
 
             weight = row[weight_col]
             if pd.isna(weight):
