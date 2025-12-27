@@ -32,13 +32,15 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 logger.addHandler(file_handler)
 
-# Also add to claude service, tools, and execution loggers
+# Also add to claude service, tools, execution, and UI loggers
 logging.getLogger('tlh_agent.services.claude').setLevel(logging.DEBUG)
 logging.getLogger('tlh_agent.services.claude').addHandler(file_handler)
 logging.getLogger('tlh_agent.services.claude_tools').setLevel(logging.DEBUG)
 logging.getLogger('tlh_agent.services.claude_tools').addHandler(file_handler)
 logging.getLogger('tlh_agent.services.execution').setLevel(logging.DEBUG)
 logging.getLogger('tlh_agent.services.execution').addHandler(file_handler)
+logging.getLogger('tlh_agent.ui.screens').setLevel(logging.DEBUG)
+logging.getLogger('tlh_agent.ui.screens').addHandler(file_handler)
 
 
 @dataclass

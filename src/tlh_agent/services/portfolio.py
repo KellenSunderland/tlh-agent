@@ -156,11 +156,12 @@ class PortfolioService:
         Returns:
             Summary with totals and counts.
         """
-        # Get positions from Alpaca
-        positions = self._alpaca.get_positions()
+        # Get account equity (this accounts for margin/cash correctly)
+        account = self._alpaca.get_account()
+        total_value = account.equity
 
-        # Calculate totals from positions
-        total_value = sum((p.market_value for p in positions), Decimal("0"))
+        # Get positions for cost basis and unrealized P/L
+        positions = self._alpaca.get_positions()
         total_cost = sum((p.cost_basis for p in positions), Decimal("0"))
         unrealized_pl = sum((p.unrealized_pl for p in positions), Decimal("0"))
 
@@ -281,10 +282,10 @@ class PortfolioService:
         return self._alpaca.get_order_history(days=days)
 
     def get_total_value(self) -> Decimal:
-        """Get total portfolio value.
+        """Get total portfolio value (account equity).
 
         Returns:
-            Total market value of all positions.
+            Account equity (positions minus margin debt).
         """
-        positions = self._alpaca.get_positions()
-        return sum((p.market_value for p in positions), Decimal("0"))
+        account = self._alpaca.get_account()
+        return account.equity

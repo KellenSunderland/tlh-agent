@@ -30,10 +30,10 @@ class DashboardScreen(BaseScreen):
         self.cards: dict[str, MetricCard] = {}
 
         card_configs = [
-            ("total_value", "Total Value", "$0.00", None),
+            ("equity", "Account Equity", "$0.00", None),
+            ("positions", "Position Value", "$0.00", None),
+            ("cash", "Cash/Margin", "$0.00", None),
             ("unrealized", "Unrealized G/L", "$0.00", None),
-            ("ytd_harvested", "YTD Harvested", "$0.00", None),
-            ("pending", "Pending Harvests", "0", None),
         ]
 
         for i, (card_id, label, value, trend) in enumerate(card_configs):
@@ -78,29 +78,33 @@ class DashboardScreen(BaseScreen):
             self._show_not_connected()
             return
 
-        # Get portfolio summary from live Alpaca data
+        # Get account and position data from Alpaca
+        account = provider.alpaca.get_account()
+        positions = provider.alpaca.get_positions()
+        position_value = sum(p.market_value for p in positions)
+
+        # Get portfolio summary for unrealized G/L
         summary = provider.portfolio.get_portfolio_summary()
 
-        # Log position details for debugging
-        if provider.alpaca:
-            positions = provider.alpaca.get_positions()
-            logger.info(f"DASHBOARD: {len(positions)} positions from Alpaca:")
-            for p in positions:
-                logger.info(f"  {p.symbol}: {p.qty} @ ${p.current_price} = ${p.market_value}")
-            account = provider.alpaca.get_account()
-            logger.info(
-                f"DASHBOARD: Calculated total=${summary.total_value:,.2f}, "
-                f"Account equity=${account.equity}, cash=${account.cash}"
-            )
+        logger.info(
+            f"DASHBOARD: equity=${account.equity}, "
+            f"positions=${position_value}, cash=${account.cash}"
+        )
 
         # Update summary cards
-        self.cards["total_value"].set_value(f"${summary.total_value:,.2f}")
+        self.cards["equity"].set_value(f"${account.equity:,.2f}")
+        self.cards["positions"].set_value(f"${position_value:,.2f}")
+
+        # Show cash with note if negative (margin)
+        if account.cash < 0:
+            self.cards["cash"].set_value(f"${account.cash:,.2f}", "(margin)")
+        else:
+            self.cards["cash"].set_value(f"${account.cash:,.2f}")
+
         self.cards["unrealized"].set_value(
             f"${summary.unrealized_gain_loss:+,.2f}",
             f"{summary.unrealized_gain_loss_pct:+.2f}%",
         )
-        self.cards["ytd_harvested"].set_value(f"${summary.ytd_harvested_losses:,.2f}")
-        self.cards["pending"].set_value(str(summary.pending_harvest_opportunities))
 
         # Clear and rebuild opportunities list
         for widget in self.opps_content.winfo_children():
@@ -122,10 +126,10 @@ class DashboardScreen(BaseScreen):
 
     def _show_not_connected(self) -> None:
         """Show UI state when Alpaca is not connected."""
-        self.cards["total_value"].set_value("--")
+        self.cards["equity"].set_value("--")
+        self.cards["positions"].set_value("--")
+        self.cards["cash"].set_value("--")
         self.cards["unrealized"].set_value("--")
-        self.cards["ytd_harvested"].set_value("--")
-        self.cards["pending"].set_value("--")
 
         for widget in self.opps_content.winfo_children():
             widget.destroy()
