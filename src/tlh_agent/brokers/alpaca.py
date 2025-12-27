@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 
+from alpaca.data.historical import StockHistoricalDataClient
+from alpaca.data.requests import StockLatestQuoteRequest
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide, OrderStatus, QueryOrderStatus, TimeInForce
 from alpaca.trading.requests import GetOrdersRequest, LimitOrderRequest, MarketOrderRequest
@@ -69,6 +71,10 @@ class AlpacaClient:
             api_key=api_key,
             secret_key=secret_key,
             paper=paper,
+        )
+        self._data_client = StockHistoricalDataClient(
+            api_key=api_key,
+            secret_key=secret_key,
         )
         self._paper = paper
 
@@ -221,6 +227,27 @@ class AlpacaClient:
             return True
         except Exception:
             return False
+
+    def get_quote(self, symbol: str) -> Decimal | None:
+        """Get the latest quote price for a symbol.
+
+        Args:
+            symbol: Stock symbol.
+
+        Returns:
+            The current ask price, or None if unavailable.
+        """
+        try:
+            request = StockLatestQuoteRequest(symbol_or_symbols=symbol)
+            quotes = self._data_client.get_stock_latest_quote(request)
+            if symbol in quotes:
+                quote = quotes[symbol]
+                # Use ask price, or bid, or None
+                price = quote.ask_price or quote.bid_price
+                return Decimal(str(price)) if price else None
+            return None
+        except Exception:
+            return None
 
     def _convert_order(self, order) -> AlpacaOrder:
         """Convert Alpaca SDK order to our dataclass."""

@@ -704,16 +704,32 @@ class ClaudeToolProvider:
             added_trades = []
             total_invested = Decimal("0")
 
+            # Get current prices if portfolio service available
+            prices: dict[str, Decimal] = {}
+            if self._portfolio_service:
+                positions = self._portfolio_service.get_positions()
+                for pos in positions:
+                    prices[pos.ticker] = pos.current_price
+
             for constituent in constituents:
                 # Calculate dollar amount for this stock
                 dollar_amount = investment_amount * constituent.weight / Decimal("100")
 
-                # Estimate price (use weight as rough proxy, or default $100)
-                # In production, would fetch real prices
-                estimated_price = Decimal("100")
+                # Get real price from positions, or fetch quote
+                current_price = prices.get(constituent.symbol)
+                if not current_price and self._portfolio_service:
+                    alpaca = getattr(self._portfolio_service, "_alpaca", None)
+                    if alpaca:
+                        try:
+                            quote = alpaca.get_quote(constituent.symbol)
+                            current_price = quote if quote else Decimal("100")
+                        except Exception:
+                            current_price = Decimal("100")  # Fallback
+                if not current_price:
+                    current_price = Decimal("100")  # Final fallback
 
                 # Calculate shares (allow fractional)
-                shares = dollar_amount / estimated_price
+                shares = dollar_amount / current_price
 
                 if shares > Decimal("0.0001"):  # Skip tiny positions
                     queued = self._trade_queue.add_trade(
@@ -722,7 +738,7 @@ class ClaudeToolProvider:
                         symbol=constituent.symbol,
                         name=constituent.name,
                         shares=shares.quantize(Decimal("0.0001")),
-                        current_price=estimated_price,
+                        current_price=current_price,
                         reason=f"S&P 500 index buy ({float(constituent.weight):.2f}% weight)",
                     )
                     added_trades.append({
