@@ -105,9 +105,21 @@ class PositionsScreen(BaseScreen):
         else:
             positions = MockDataFactory.get_positions()
 
+        # Helper to get cost basis (different attr names in live vs mock)
+        def get_cost(p: Any) -> Decimal:
+            return getattr(p, "total_cost_basis", None) or getattr(p, "cost_basis", Decimal(0))
+
+        def get_shares(p: Any) -> Decimal:
+            return getattr(p, "total_shares", None) or getattr(p, "shares", Decimal(0))
+
+        def get_gain_loss(p: Any) -> Decimal:
+            return getattr(p, "unrealized_gain_loss", None) or getattr(
+                p, "unrealized_pl", Decimal(0)
+            )
+
         # Update summary
         total_value = sum(p.market_value for p in positions)
-        total_cost = sum(p.total_cost_basis for p in positions)
+        total_cost = sum(get_cost(p) for p in positions)
         total_gain = total_value - total_cost
 
         self.summary_labels["total_value"].configure(text=f"${total_value:,.2f}")
@@ -120,14 +132,14 @@ class PositionsScreen(BaseScreen):
         # Build table data
         table_data = []
         for pos in positions:
-            gain_loss = pos.unrealized_gain_loss
-            gain_loss_pct = (
-                (gain_loss / pos.total_cost_basis * 100) if pos.total_cost_basis else Decimal(0)
-            )
+            cost_basis = get_cost(pos)
+            shares = get_shares(pos)
+            gain_loss = get_gain_loss(pos)
+            gain_loss_pct = (gain_loss / cost_basis * 100) if cost_basis else Decimal(0)
 
             status = ""
             tag = ""
-            if pos.wash_sale_until:
+            if getattr(pos, "wash_sale_until", None):
                 status = "Wash Sale"
                 tag = "muted"
             elif gain_loss < 0:
@@ -139,10 +151,10 @@ class PositionsScreen(BaseScreen):
                 {
                     "ticker": pos.ticker,
                     "name": pos.name,
-                    "shares": f"{pos.total_shares:,.2f}",
+                    "shares": f"{shares:,.2f}",
                     "current_price": f"${pos.current_price:,.2f}",
                     "market_value": f"${pos.market_value:,.2f}",
-                    "cost_basis": f"${pos.total_cost_basis:,.2f}",
+                    "cost_basis": f"${cost_basis:,.2f}",
                     "gain_loss": f"${gain_loss:+,.2f}",
                     "gain_loss_pct": f"{gain_loss_pct:+.1f}%",
                     "status": status,
