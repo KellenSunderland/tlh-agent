@@ -38,6 +38,7 @@ class ToolName(Enum):
     BUY_INDEX = "buy_index"
     CLEAR_TRADE_QUEUE = "clear_trade_queue"
     REMOVE_TRADE = "remove_trade"
+    REBALANCE_TO_TARGET = "rebalance_to_target"
 
 
 @dataclass
@@ -265,18 +266,50 @@ class ClaudeToolProvider:
             ToolDefinition(
                 name=ToolName.REMOVE_TRADE.value,
                 description=(
-                    "Remove specific trades from the queue by symbol. "
-                    "Use this to cancel trades for a specific stock."
+                    "Remove trades from the queue by symbol(s). "
+                    "Can remove a single stock or multiple stocks at once."
                 ),
                 input_schema={
                     "type": "object",
                     "properties": {
-                        "symbol": {
-                            "type": "string",
-                            "description": "Stock symbol to remove (e.g., 'AAPL').",
+                        "symbols": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                            "description": (
+                                "List of stock symbols to remove "
+                                "(e.g., ['AAPL', 'MSFT', 'GOOGL'])."
+                            ),
                         },
                     },
-                    "required": ["symbol"],
+                    "required": ["symbols"],
+                },
+            ),
+            ToolDefinition(
+                name=ToolName.REBALANCE_TO_TARGET.value,
+                description=(
+                    "Calculate trades needed to rebalance portfolio to a target value "
+                    "with holdings matching an index (default S&P 500). "
+                    "This will propose SELL orders for overweight/unwanted positions "
+                    "and BUY orders for underweight positions. Use this when the user "
+                    "wants to rebalance to a specific portfolio value."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "target_value": {
+                            "type": "number",
+                            "description": (
+                                "Target total portfolio value in dollars "
+                                "(e.g., 100000 for $100k)."
+                            ),
+                        },
+                        "index": {
+                            "type": "string",
+                            "description": "Index to match (default 'sp500').",
+                            "default": "sp500",
+                        },
+                    },
+                    "required": ["target_value"],
                 },
             ),
         ]
@@ -328,7 +361,12 @@ class ClaudeToolProvider:
             elif tool_name == ToolName.CLEAR_TRADE_QUEUE.value:
                 return self._clear_trade_queue()
             elif tool_name == ToolName.REMOVE_TRADE.value:
-                return self._remove_trade(symbol=arguments.get("symbol", ""))
+                return self._remove_trades(symbols=arguments.get("symbols", []))
+            elif tool_name == ToolName.REBALANCE_TO_TARGET.value:
+                return self._rebalance_to_target(
+                    target_value=Decimal(str(arguments.get("target_value", 0))),
+                    index_name=arguments.get("index", "sp500"),
+                )
             else:
                 return ToolResult(success=False, data={}, error=f"Unknown tool: {tool_name}")
         except Exception as e:
@@ -787,14 +825,14 @@ class ClaudeToolProvider:
             logger.exception("Error in clear_trade_queue")
             return ToolResult(success=False, data={}, error=str(e))
 
-    def _remove_trade(self, symbol: str) -> ToolResult:
-        """Remove trades for a specific symbol from the queue.
+    def _remove_trades(self, symbols: list[str]) -> ToolResult:
+        """Remove trades for one or more symbols from the queue.
 
         Args:
-            symbol: Stock symbol to remove.
+            symbols: List of stock symbols to remove.
 
         Returns:
-            ToolResult with count of removed trades.
+            ToolResult with count of removed trades per symbol.
         """
         if not self._trade_queue:
             return ToolResult(
@@ -803,39 +841,237 @@ class ClaudeToolProvider:
                 error="Trade queue service not available",
             )
 
-        if not symbol:
+        if not symbols:
             return ToolResult(
                 success=False,
                 data={},
-                error="Symbol is required",
+                error="At least one symbol is required",
             )
 
         try:
-            symbol_upper = symbol.upper()
+            # Normalize symbols to uppercase
+            symbols_upper = {s.upper() for s in symbols}
             trades = self._trade_queue.get_all_trades()
-            removed = 0
+
+            removed_by_symbol: dict[str, int] = {}
+            total_removed = 0
 
             for trade in trades:
-                if trade.symbol == symbol_upper:
+                if trade.symbol in symbols_upper:
                     self._trade_queue.remove_trade(trade.id)
-                    removed += 1
+                    removed_by_symbol[trade.symbol] = removed_by_symbol.get(trade.symbol, 0) + 1
+                    total_removed += 1
 
-            if removed == 0:
+            if total_removed == 0:
                 return ToolResult(
                     success=True,
                     data={
                         "trades_removed": 0,
-                        "message": f"No trades found for {symbol_upper}.",
+                        "message": f"No trades found for {', '.join(sorted(symbols_upper))}.",
                     },
                 )
 
             return ToolResult(
                 success=True,
                 data={
-                    "trades_removed": removed,
-                    "message": f"Removed {removed} trade(s) for {symbol_upper}.",
+                    "trades_removed": total_removed,
+                    "removed_by_symbol": removed_by_symbol,
+                    "message": f"Removed {total_removed} trade(s) for "
+                    f"{len(removed_by_symbol)} symbol(s).",
                 },
             )
         except Exception as e:
-            logger.exception("Error in remove_trade")
+            logger.exception("Error in remove_trades")
+            return ToolResult(success=False, data={}, error=str(e))
+
+    def _rebalance_to_target(
+        self,
+        target_value: Decimal,
+        index_name: str = "sp500",
+    ) -> ToolResult:
+        """Rebalance portfolio to a target value matching index weights.
+
+        Args:
+            target_value: Target total portfolio value in dollars.
+            index_name: Which index to match (default sp500).
+
+        Returns:
+            ToolResult with proposed trades.
+        """
+        if not self._portfolio_service or not self._index_service:
+            return ToolResult(
+                success=False,
+                data={},
+                error="Portfolio service or index service not available",
+            )
+
+        if index_name != "sp500":
+            return ToolResult(
+                success=False,
+                data={},
+                error=f"{index_name} not yet implemented. Only sp500 available.",
+            )
+
+        if target_value <= 0:
+            return ToolResult(
+                success=False,
+                data={},
+                error="Target value must be positive",
+            )
+
+        try:
+            # Get current positions
+            positions = self._portfolio_service.get_positions()
+            current_holdings: dict[str, dict] = {}
+            for pos in positions:
+                current_holdings[pos.ticker] = {
+                    "shares": pos.shares,
+                    "price": pos.current_price,
+                    "value": pos.market_value,
+                    "name": pos.name,
+                }
+
+            # Get index constituents with weights
+            constituents = self._index_service.get_constituents()
+            index_symbols = {c.symbol for c in constituents}
+            weight_by_symbol = {c.symbol: c.weight for c in constituents}
+            name_by_symbol = {c.symbol: c.name for c in constituents}
+
+            sells = []
+            buys = []
+            total_sell_value = Decimal("0")
+            total_buy_value = Decimal("0")
+
+            # Get prices for index stocks we don't currently hold
+            alpaca = getattr(self._portfolio_service, "_alpaca", None)
+
+            # Step 1: Calculate sells - positions not in index or overweight
+            for symbol, holding in current_holdings.items():
+                target_weight = weight_by_symbol.get(symbol, Decimal("0"))
+                target_position_value = target_value * target_weight / Decimal("100")
+                current_value = holding["value"]
+                price = holding["price"]
+
+                if symbol not in index_symbols:
+                    # Not in index - sell all
+                    sells.append({
+                        "symbol": symbol,
+                        "name": holding["name"],
+                        "shares": float(holding["shares"]),
+                        "notional": float(current_value),
+                        "reason": "Not in S&P 500 index",
+                    })
+                    total_sell_value += current_value
+                elif current_value > target_position_value:
+                    # Overweight - sell excess
+                    excess_value = current_value - target_position_value
+                    excess_shares = excess_value / price
+                    if excess_shares > Decimal("0.01"):
+                        sells.append({
+                            "symbol": symbol,
+                            "name": holding["name"],
+                            "shares": float(excess_shares.quantize(Decimal("0.0001"))),
+                            "notional": float(excess_value),
+                            "reason": f"Overweight (target: ${float(target_position_value):,.0f})",
+                        })
+                        total_sell_value += excess_value
+
+            # Step 2: Calculate buys - underweight positions
+            for constituent in constituents:
+                symbol = constituent.symbol
+                target_position_value = target_value * constituent.weight / Decimal("100")
+                current_value = current_holdings.get(symbol, {}).get("value", Decimal("0"))
+
+                if current_value < target_position_value:
+                    # Underweight - buy more
+                    buy_value = target_position_value - current_value
+
+                    # Get price
+                    if symbol in current_holdings:
+                        price = current_holdings[symbol]["price"]
+                    elif alpaca:
+                        try:
+                            price = alpaca.get_quote(symbol) or Decimal("100")
+                        except Exception:
+                            price = Decimal("100")
+                    else:
+                        price = Decimal("100")
+
+                    shares = buy_value / price
+                    if shares > Decimal("0.01"):
+                        buys.append({
+                            "symbol": symbol,
+                            "name": name_by_symbol.get(symbol, symbol),
+                            "shares": float(shares.quantize(Decimal("0.0001"))),
+                            "notional": float(buy_value),
+                            "reason": f"Underweight (target: ${float(target_position_value):,.0f})",
+                        })
+                        total_buy_value += buy_value
+
+            # Add trades to queue
+            trades_added = 0
+
+            # Add sells first
+            for sell in sells:
+                self._trade_queue.add_trade(
+                    trade_type=TradeType.REBALANCE,
+                    action=TradeAction.SELL,
+                    symbol=sell["symbol"],
+                    name=sell["name"],
+                    shares=Decimal(str(sell["shares"])),
+                    current_price=current_holdings.get(
+                        sell["symbol"], {}
+                    ).get("price", Decimal("100")),
+                    reason=sell["reason"],
+                )
+                trades_added += 1
+
+            # Add buys
+            for buy in buys:
+                price = current_holdings.get(buy["symbol"], {}).get("price")
+                if not price and alpaca:
+                    try:
+                        price = alpaca.get_quote(buy["symbol"]) or Decimal("100")
+                    except Exception:
+                        price = Decimal("100")
+                if not price:
+                    price = Decimal("100")
+
+                self._trade_queue.add_trade(
+                    trade_type=TradeType.REBALANCE,
+                    action=TradeAction.BUY,
+                    symbol=buy["symbol"],
+                    name=buy["name"],
+                    shares=Decimal(str(buy["shares"])),
+                    current_price=price,
+                    reason=buy["reason"],
+                )
+                trades_added += 1
+
+            current_value = sum(h["value"] for h in current_holdings.values())
+            net_cash_flow = total_sell_value - total_buy_value
+
+            return ToolResult(
+                success=True,
+                data={
+                    "target_value": float(target_value),
+                    "current_value": float(current_value),
+                    "total_sells": len(sells),
+                    "total_buys": len(buys),
+                    "sell_value": float(total_sell_value),
+                    "buy_value": float(total_buy_value),
+                    "net_cash_flow": float(net_cash_flow),
+                    "trades_added": trades_added,
+                    "sells": sells[:10],  # Show first 10 for summary
+                    "buys": buys[:10],  # Show first 10 for summary
+                    "message": (
+                        f"Added {trades_added} trades to queue: "
+                        f"{len(sells)} sells (${float(total_sell_value):,.0f}) and "
+                        f"{len(buys)} buys (${float(total_buy_value):,.0f}). "
+                        f"Net cash flow: ${float(net_cash_flow):+,.0f}"
+                    ),
+                },
+            )
+        except Exception as e:
+            logger.exception("Error in rebalance_to_target")
             return ToolResult(success=False, data={}, error=str(e))
