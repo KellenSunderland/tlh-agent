@@ -63,6 +63,9 @@ class Colors:
     WARNING: ClassVar[str] = "#ff9900"  # Orange (alerts)
     INFO: ClassVar[str] = "#00a1c9"  # AWS Teal (info states)
 
+    # Text on light backgrounds (e.g. macOS native button chrome)
+    TEXT_ON_LIGHT: ClassVar[str] = "#000000"
+
     # Borders and dividers
     BORDER: ClassVar[str] = "#3b4a5a"  # Subtle borders
     BORDER_LIGHT: ClassVar[str] = "#4a5a6a"  # Lighter border for focus
