@@ -8,7 +8,7 @@ from tlh_agent.credentials import get_claude_api_key, has_claude_api_key
 from tlh_agent.services import get_provider
 from tlh_agent.services.assistant import AssistantController, AssistantState
 from tlh_agent.services.claude import ClaudeService
-from tlh_agent.services.claude_tools import ClaudeToolProvider
+from tlh_agent.services.tools import ClaudeToolProvider
 from tlh_agent.services.index import IndexService
 from tlh_agent.services.rebalance import RebalanceService
 from tlh_agent.services.trade_queue import TradeQueueService

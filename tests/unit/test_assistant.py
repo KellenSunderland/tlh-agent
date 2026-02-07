@@ -6,7 +6,7 @@ import pytest
 
 from tlh_agent.services.assistant import AssistantController, AssistantState
 from tlh_agent.services.claude import ClaudeService
-from tlh_agent.services.claude_tools import ClaudeToolProvider, ToolResult
+from tlh_agent.services.tools import ClaudeToolProvider, ToolResult
 
 
 class TestAssistantState:

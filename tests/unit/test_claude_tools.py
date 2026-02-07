@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from tlh_agent.services.claude_tools import ClaudeToolProvider, ToolName, ToolResult
+from tlh_agent.services.tools import ClaudeToolProvider, ToolName, ToolResult
 from tlh_agent.services.index import IndexConstituent, IndexService
 from tlh_agent.services.portfolio import PortfolioService, Position
 from tlh_agent.services.rebalance import (

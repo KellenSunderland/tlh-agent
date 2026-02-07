@@ -15,7 +15,7 @@ from typing import Any
 import anthropic
 
 from tlh_agent.services.claude import ClaudeService, StreamEvent
-from tlh_agent.services.claude_tools import ClaudeToolProvider
+from tlh_agent.services.tools import ClaudeToolProvider
 
 # Set up dedicated log file for agent debugging
 LOG_FILE = Path.home() / ".tlh-agent" / "agent.log"
@@ -35,8 +35,8 @@ logger.addHandler(file_handler)
 # Also add to claude service, tools, execution, and UI loggers
 logging.getLogger('tlh_agent.services.claude').setLevel(logging.DEBUG)
 logging.getLogger('tlh_agent.services.claude').addHandler(file_handler)
-logging.getLogger('tlh_agent.services.claude_tools').setLevel(logging.DEBUG)
-logging.getLogger('tlh_agent.services.claude_tools').addHandler(file_handler)
+logging.getLogger('tlh_agent.services.tools').setLevel(logging.DEBUG)
+logging.getLogger('tlh_agent.services.tools').addHandler(file_handler)
 logging.getLogger('tlh_agent.services.execution').setLevel(logging.DEBUG)
 logging.getLogger('tlh_agent.services.execution').addHandler(file_handler)
 logging.getLogger('tlh_agent.ui.screens').setLevel(logging.DEBUG)
