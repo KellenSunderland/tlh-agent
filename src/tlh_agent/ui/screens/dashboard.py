@@ -23,6 +23,16 @@ class DashboardScreen(BaseScreen):
         )
         header.pack(fill=tk.X, pady=(0, Spacing.LG))
 
+        # Paper/Live trading mode badge (inline with subtitle)
+        self._mode_badge = tk.Label(
+            header._title_section,
+            text="",
+            font=Fonts.CAPTION,
+            bg=Colors.BG_PRIMARY,
+            padx=Spacing.SM,
+        )
+        self._mode_badge.pack(anchor=tk.W)
+
         # Summary cards row - use grid for equal width columns
         cards_frame = tk.Frame(self, bg=Colors.BG_PRIMARY)
         cards_frame.pack(fill=tk.X, pady=(0, Spacing.LG))
@@ -78,6 +88,12 @@ class DashboardScreen(BaseScreen):
             self._show_not_connected()
             return
 
+        # Update paper/live badge
+        if provider.config.alpaca_paper:
+            self._mode_badge.configure(text="PAPER", fg=Colors.ACCENT)
+        else:
+            self._mode_badge.configure(text="LIVE", fg=Colors.SUCCESS_TEXT)
+
         # Get account and position data from Alpaca
         account = provider.alpaca.get_account()
         positions = provider.alpaca.get_positions()
@@ -126,6 +142,8 @@ class DashboardScreen(BaseScreen):
 
     def _show_not_connected(self) -> None:
         """Show UI state when Alpaca is not connected."""
+        self._mode_badge.configure(text="", fg=Colors.TEXT_MUTED)
+
         self.cards["equity"].set_value("--")
         self.cards["positions"].set_value("--")
         self.cards["cash"].set_value("--")
