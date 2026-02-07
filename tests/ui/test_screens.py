@@ -34,10 +34,10 @@ class TestDashboardScreen:
         screen = main_window._screens["dashboard"]
         expected_texts = [
             "Dashboard",
-            "Total Value",
+            "Account Equity",
+            "Position Value",
+            "Cash/Margin",
             "Unrealized",
-            "YTD Harvested",
-            "Pending",
             "Top Harvest Opportunities",
             "Wash Sale Alerts",
         ]
@@ -118,7 +118,7 @@ class TestPositionsScreen:
         table_data = screen.table._data
         tickers_in_table = [row.get("ticker", "") for row in table_data]
 
-        expected_tickers = ["AAPL", "MSFT", "NVDA", "GOOGL"]
+        expected_tickers = ["AAPL", "MSFT"]
         for ticker in expected_tickers:
             assert ticker in tickers_in_table, f"Ticker {ticker} not in table data"
 

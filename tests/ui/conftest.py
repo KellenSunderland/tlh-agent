@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from tlh_agent.app import TLHAgentApp
+from tlh_agent.brokers.alpaca import AlpacaAccount, AlpacaPosition
 from tlh_agent.data.local_store import LossLedgerYear, WashSaleRestriction
 from tlh_agent.services import ServiceProvider
 from tlh_agent.services.portfolio import PortfolioSummary, Position
@@ -159,8 +160,38 @@ def app(request):
     def mock_create(config_dir=None, connect_alpaca=True):
         # Create base provider without Alpaca
         provider = original_create(config_dir=config_dir, connect_alpaca=False)
-        # Inject mock services to simulate live mode
-        provider.alpaca = MagicMock()  # Make is_live return True
+        # Inject mock Alpaca client with realistic data
+        mock_alpaca = MagicMock()
+        mock_alpaca.get_account.return_value = AlpacaAccount(
+            id="test-account",
+            status="ACTIVE",
+            equity=Decimal("523847.32"),
+            cash=Decimal("25613.14"),
+            buying_power=Decimal("51226.28"),
+        )
+        mock_alpaca.get_positions.return_value = [
+            AlpacaPosition(
+                symbol="AAPL",
+                qty=Decimal("50"),
+                avg_entry_price=Decimal("150.35"),
+                current_price=Decimal("195.50"),
+                market_value=Decimal("9775.00"),
+                cost_basis=Decimal("7517.50"),
+                unrealized_pl=Decimal("2257.50"),
+                unrealized_plpc=Decimal("0.3003"),
+            ),
+            AlpacaPosition(
+                symbol="MSFT",
+                qty=Decimal("40"),
+                avg_entry_price=Decimal("285.00"),
+                current_price=Decimal("378.50"),
+                market_value=Decimal("15140.00"),
+                cost_basis=Decimal("11400.00"),
+                unrealized_pl=Decimal("3740.00"),
+                unrealized_plpc=Decimal("0.3281"),
+            ),
+        ]
+        provider.alpaca = mock_alpaca
         provider.portfolio = mock_portfolio
         provider.scanner = mock_scanner
         provider.wash_sale = mock_wash_sale
