@@ -272,11 +272,12 @@ class TradeQueueScreen(BaseScreen):
 
         # Add harvest opportunities to table
         for opp in opportunities:
-            status_display = opp.status.title()
+            status = opp.queue_status or "pending"
+            status_display = status.title()
             tag = ""
-            if opp.status == "approved":
+            if status == "approved":
                 tag = "gain"
-            elif opp.status in ("rejected", "expired"):
+            elif status in ("rejected", "expired"):
                 tag = "muted"
 
             amount = opp.shares * opp.current_price
@@ -286,7 +287,7 @@ class TradeQueueScreen(BaseScreen):
                     "trade_type": "Harvest",
                     "status": status_display,
                     "ticker": opp.ticker,
-                    "name": opp.name,
+                    "name": opp.ticker,
                     "action": "Sell",
                     "shares": f"{opp.shares:,.2f}",
                     "amount": f"${amount:,.2f}",
@@ -323,14 +324,14 @@ class TradeQueueScreen(BaseScreen):
 
         # Update summary counts
         total_count = len(table_data)
-        pending_count = sum(1 for o in opportunities if o.status == "pending")
-        approved_count = sum(1 for o in opportunities if o.status == "approved")
+        pending_count = sum(1 for o in opportunities if (o.queue_status or "pending") == "pending")
+        approved_count = sum(1 for o in opportunities if o.queue_status == "approved")
         if self._trade_queue:
             pending_count += len(self._trade_queue.get_pending_trades())
-        active_statuses = ("pending", "approved")
-        total_loss = sum(o.unrealized_loss for o in opportunities if o.status in active_statuses)
+        active_statuses = ("pending", "approved", None)
+        total_loss = sum(o.unrealized_loss for o in opportunities if o.queue_status in active_statuses)
         total_benefit = sum(
-            o.estimated_tax_benefit for o in opportunities if o.status in active_statuses
+            o.estimated_tax_benefit for o in opportunities if o.queue_status in active_statuses
         )
 
         self.summary_labels["total"].configure(text=str(total_count))
@@ -414,17 +415,18 @@ class TradeQueueScreen(BaseScreen):
 
         tk.Label(
             row1,
-            text=f"{opp.ticker} - {opp.name}",
+            text=opp.ticker,
             font=Fonts.BODY_BOLD,
             fg=Colors.TEXT_PRIMARY,
             bg=Colors.BG_SECONDARY,
         ).pack(side=tk.LEFT)
 
+        status = opp.queue_status or "pending"
         tk.Label(
             row1,
-            text=f"Status: {opp.status.title()}",
+            text=f"Status: {status.title()}",
             font=Fonts.BODY,
-            fg=Colors.ACCENT if opp.status == "approved" else Colors.TEXT_MUTED,
+            fg=Colors.ACCENT if status == "approved" else Colors.TEXT_MUTED,
             bg=Colors.BG_SECONDARY,
         ).pack(side=tk.RIGHT)
 
@@ -451,13 +453,9 @@ class TradeQueueScreen(BaseScreen):
         row3 = tk.Frame(details, bg=Colors.BG_SECONDARY)
         row3.pack(fill=tk.X, pady=2)
 
-        action_text = f"Recommended: {opp.recommended_action.title()}"
-        if opp.swap_target:
-            action_text += f" to {opp.swap_target}"
-
         tk.Label(
             row3,
-            text=action_text,
+            text="Recommended: Sell",
             font=Fonts.BODY,
             fg=Colors.ACCENT,
             bg=Colors.BG_SECONDARY,
@@ -513,7 +511,7 @@ class TradeQueueScreen(BaseScreen):
         if provider.scanner:
             scan_result = provider.scanner.scan()
             for opp in scan_result.opportunities:
-                if opp.status == "pending":
+                if (opp.queue_status or "pending") == "pending":
                     provider.scanner.approve_harvest(opp.id)
 
         # Approve queued trades
@@ -530,7 +528,7 @@ class TradeQueueScreen(BaseScreen):
         if provider.scanner:
             scan_result = provider.scanner.scan()
             for opp in scan_result.opportunities:
-                if opp.status == "pending":
+                if (opp.queue_status or "pending") == "pending":
                     provider.scanner.reject_harvest(opp.id)
 
         # Clear all queued trades
@@ -553,7 +551,7 @@ class TradeQueueScreen(BaseScreen):
         approved_harvests = []
         if provider.scanner:
             scan_result = provider.scanner.scan()
-            approved_harvests = [o for o in scan_result.opportunities if o.status == "approved"]
+            approved_harvests = [o for o in scan_result.opportunities if o.queue_status == "approved"]
 
         approved_queued = []
         if self._trade_queue:

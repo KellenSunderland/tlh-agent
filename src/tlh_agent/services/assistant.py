@@ -211,11 +211,12 @@ class AssistantController:
         logger.info(f"Finished receiving events. Total: {event_count}")
         logger.info(f"Pending tool uses: {len(pending_tool_uses)}")
 
-        # Process any pending tool uses
+        # Process any pending tool uses (all must be sent back together)
         while pending_tool_uses:
-            tool_use = pending_tool_uses.pop(0)
-            logger.info(f"Processing tool use: {tool_use['name']}")
-            await self._execute_tool_and_continue(tool_use, pending_tool_uses)
+            batch = list(pending_tool_uses)
+            pending_tool_uses.clear()
+            logger.info(f"Processing {len(batch)} tool use(s) as a batch")
+            await self._execute_tools_and_continue(batch, pending_tool_uses)
 
         logger.info("=== PROCESS_MESSAGE COMPLETE ===")
 
@@ -247,56 +248,56 @@ class AssistantController:
             self._update_state(current_tool=event.tool_name)
             self._safe_callback(self._on_tool_use, event.tool_name)
 
-    async def _execute_tool_and_continue(
+    async def _execute_tools_and_continue(
         self,
-        tool_use: dict[str, Any],
+        tool_uses: list[dict[str, Any]],
         pending_tool_uses: list[dict[str, Any]],
     ) -> None:
-        """Execute a tool and continue the conversation.
+        """Execute all tool uses and send results back to Claude together.
+
+        The Anthropic API requires all tool results from parallel tool calls
+        to be sent in a single user message.
 
         Args:
-            tool_use: The tool use to execute.
-            pending_tool_uses: List to collect more pending tool uses.
+            tool_uses: The tool uses to execute.
+            pending_tool_uses: List to collect more pending tool uses from the response.
         """
-        tool_name = tool_use["name"]
-        tool_input = tool_use["input"] or {}
-        tool_use_id = tool_use["id"]
+        # Execute all tools and collect results
+        all_results = []
+        for tool_use in tool_uses:
+            tool_name = tool_use["name"]
+            tool_input = tool_use["input"] or {}
+            tool_use_id = tool_use["id"]
 
-        logger.info(f"=== EXECUTE_TOOL START: {tool_name} ===")
-        logger.debug(f"Tool ID: {tool_use_id}")
-        logger.debug(f"Tool input: {tool_input}")
+            logger.info(f"=== EXECUTE_TOOL: {tool_name} ===")
+            logger.debug(f"Tool ID: {tool_use_id}, input: {tool_input}")
 
-        # Execute the tool
-        logger.debug("Calling tool provider execute_tool...")
-        result = self._tools.execute_tool(tool_name, tool_input)
-        logger.info(f"Tool result: success={result.success}")
-        if not result.success:
-            logger.error(f"Tool error: {result.error}")
-        else:
-            logger.debug(f"Tool data: {str(result.data)[:200]}...")
+            self._update_state(current_tool=tool_name)
+            result = self._tools.execute_tool(tool_name, tool_input)
+            logger.info(f"Tool result: success={result.success}")
+            if not result.success:
+                logger.error(f"Tool error: {result.error}")
+            else:
+                logger.debug(f"Tool data: {str(result.data)[:200]}...")
 
-        is_success = result.success
-        logger.debug("Calling on_tool_done callback...")
-        self._safe_callback(self._on_tool_done, tool_name, is_success)
+            self._safe_callback(self._on_tool_done, tool_name, result.success)
 
-        # Send result back to Claude
-        logger.info("Sending tool result back to Claude...")
-        result_json = result.to_json()
-        logger.debug(f"Result JSON length: {len(result_json)}")
+            all_results.append({
+                "tool_use_id": tool_use_id,
+                "result": result.to_json(),
+                "is_error": not result.success,
+            })
 
+        # Send all results back to Claude in one message
+        logger.info(f"Sending {len(all_results)} tool result(s) back to Claude...")
         event_count = 0
-        async for event in self._claude.add_tool_result(
-            tool_use_id=tool_use_id,
-            result=result_json,
-            is_error=not result.success,
-        ):
+        async for event in self._claude.add_tool_results(all_results):
             event_count += 1
             logger.debug(f"Tool result event #{event_count}: type={event.type}")
             await self._handle_event(event, pending_tool_uses)
 
         logger.info(f"Tool result events received: {event_count}")
         self._update_state(current_tool=None)
-        logger.info(f"=== EXECUTE_TOOL COMPLETE: {tool_name} ===")
 
     def _update_state(self, **kwargs: Any) -> None:
         """Update state and notify listeners.

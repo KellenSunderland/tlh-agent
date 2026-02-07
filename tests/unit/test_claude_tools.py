@@ -82,7 +82,7 @@ class TestClaudeToolProvider:
             avg_cost=Decimal("160"),
             market_value=Decimal("7000"),
             cost_basis=Decimal("8000"),
-            unrealized_loss=Decimal("1000"),
+            unrealized_loss=Decimal("-1000"),
             loss_pct=Decimal("-12.5"),
             estimated_tax_benefit=Decimal("350"),
             days_held=45,
@@ -229,7 +229,7 @@ class TestClaudeToolProvider:
         assert result.success is True
         assert len(result.data) == 1
         assert result.data[0]["symbol"] == "GOOGL"
-        assert result.data[0]["unrealized_loss"] == 1000.0
+        assert result.data[0]["unrealized_loss"] == -1000.0
         assert result.data[0]["estimated_tax_benefit"] == 350.0
 
     def test_get_harvest_opportunities_with_min_loss(

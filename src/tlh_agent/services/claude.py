@@ -98,7 +98,7 @@ CRITICAL RULES:
 2. For index investments, use buy_index(amount, index) - creates all trades.
 3. Users approve trades from the Trade Queue screen.
 4. Be action-oriented. Execute, don't ask for confirmation.
-5. Only use ONE tool at a time.
+5. You may call multiple tools in parallel when they are independent.
 
 Be concise in responses.""",
         repr=False,
@@ -226,37 +226,36 @@ Be concise in responses.""",
                     logger.info(f"=== CLAUDE SEND_MESSAGE COMPLETE (events: {event_count}) ===")
                     yield StreamEvent(type="message_done")
 
-    async def add_tool_result(
+    async def add_tool_results(
         self,
-        tool_use_id: str,
-        result: str,
-        is_error: bool = False,
+        results: list[dict[str, Any]],
     ) -> AsyncIterator[StreamEvent]:
-        """Add a tool result and continue the conversation.
+        """Add tool results and continue the conversation.
+
+        All results from parallel tool calls must be sent in a single message.
 
         Args:
-            tool_use_id: The ID of the tool use to respond to.
-            result: The result of the tool execution.
-            is_error: Whether the tool execution resulted in an error.
+            results: List of dicts with keys: tool_use_id, result, is_error.
 
         Yields:
-            StreamEvent objects as Claude processes the result.
+            StreamEvent objects as Claude processes the results.
         """
-        # Add tool result to history
-        logger.info("=== CLAUDE ADD_TOOL_RESULT START ===")
-        logger.debug(f"Tool use ID: {tool_use_id}")
-        logger.debug(f"Result length: {len(result)}")
-        logger.debug(f"Is error: {is_error}")
-        tool_result_block = ToolResultBlockParam(
-            type="tool_result",
-            tool_use_id=tool_use_id,
-            content=result,
-            is_error=is_error,
-        )
+        logger.info(f"=== CLAUDE ADD_TOOL_RESULTS START ({len(results)} results) ===")
+        tool_result_blocks = []
+        for r in results:
+            logger.debug(f"Tool use ID: {r['tool_use_id']}, result length: {len(r['result'])}")
+            tool_result_blocks.append(
+                ToolResultBlockParam(
+                    type="tool_result",
+                    tool_use_id=r["tool_use_id"],
+                    content=r["result"],
+                    is_error=r.get("is_error", False),
+                )
+            )
         self._history.append(
-            MessageParam(role="user", content=[tool_result_block])
+            MessageParam(role="user", content=tool_result_blocks)
         )
-        logger.debug("Tool result added to history")
+        logger.debug(f"Added {len(tool_result_blocks)} tool results to history")
 
         # Continue the conversation
         logger.info("Continuing conversation with tool result...")
@@ -317,7 +316,7 @@ Be concise in responses.""",
                         self._history.append({"role": "assistant", "content": assistant_content})
                         logger.debug(f"Added {len(assistant_content)} tool result blocks")
 
-                    logger.info(f"=== CLAUDE ADD_TOOL_RESULT COMPLETE (events: {event_count}) ===")
+                    logger.info(f"=== CLAUDE ADD_TOOL_RESULTS COMPLETE (events: {event_count}) ===")
                     yield StreamEvent(type="message_done")
 
     def get_conversation_history(self) -> list[Message]:

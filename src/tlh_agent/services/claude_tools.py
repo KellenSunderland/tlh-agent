@@ -482,7 +482,7 @@ class ClaudeToolProvider:
             scan_result = self._scanner.scan()
             opportunities = [
                 o for o in scan_result.opportunities
-                if o.unrealized_loss >= min_loss
+                if o.unrealized_loss <= -min_loss
             ]
 
             return ToolResult(
