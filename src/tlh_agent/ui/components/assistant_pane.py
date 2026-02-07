@@ -75,7 +75,7 @@ class AssistantPane(tk.Frame):
             header_content,
             text="Clear",
             font=Fonts.CAPTION,
-            fg=Colors.TEXT_MUTED,
+            fg=Colors.TEXT_SECONDARY,
             bg=Colors.BG_TERTIARY,
             activebackground=Colors.BG_SECONDARY,
             activeforeground=Colors.TEXT_PRIMARY,
