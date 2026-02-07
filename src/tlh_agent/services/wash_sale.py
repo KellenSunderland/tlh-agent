@@ -1,9 +1,12 @@
 """Wash sale tracking service for TLH Agent."""
 
+import logging
 from datetime import date, timedelta
 from decimal import Decimal
 
 from tlh_agent.data.local_store import LocalStore, WashSaleRestriction
+
+logger = logging.getLogger(__name__)
 
 
 class WashSaleService:
@@ -63,6 +66,10 @@ class WashSaleService:
         )
 
         self._store.add_restriction(restriction)
+        logger.info(
+            "Created wash sale restriction: %s sold on %s, clear date %s",
+            ticker, sale_date, restriction_end,
+        )
         return restriction
 
     def is_restricted(self, ticker: str) -> bool:
@@ -158,6 +165,7 @@ class WashSaleService:
                 r.rebuy_price = rebuy_price
                 r.rebuy_date = rebuy_date or date.today()
                 self._store.update_restriction(r)
+                logger.info("Rebuy complete for %s at $%.2f", r.ticker, rebuy_price)
                 return
         raise ValueError(f"Restriction not found: {restriction_id}")
 
@@ -174,6 +182,7 @@ class WashSaleService:
             if r.id == restriction_id:
                 r.rebuy_status = "skipped"
                 self._store.update_restriction(r)
+                logger.info("Rebuy skipped for %s", r.ticker)
                 return
         raise ValueError(f"Restriction not found: {restriction_id}")
 
@@ -205,8 +214,10 @@ class WashSaleService:
             window_end = r.sale_date + timedelta(days=self.WINDOW_DAYS)
 
             if window_start <= buy_date <= window_end:
+                logger.debug("would_violate: %s on %s = True", ticker, buy_date)
                 return True
 
+        logger.debug("would_violate: %s on %s = False", ticker, buy_date)
         return False
 
     def cleanup_old_restrictions(self, days_old: int = 90) -> int:
@@ -226,4 +237,5 @@ class WashSaleService:
                 self._store.remove_restriction(r.id)
                 removed += 1
 
+        logger.debug("cleanup_old_restrictions: removed %d restrictions older than %d days", removed, days_old)
         return removed

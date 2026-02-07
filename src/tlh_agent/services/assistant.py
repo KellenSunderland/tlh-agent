@@ -42,6 +42,19 @@ logging.getLogger('tlh_agent.services.execution').addHandler(file_handler)
 logging.getLogger('tlh_agent.ui.screens').setLevel(logging.DEBUG)
 logging.getLogger('tlh_agent.ui.screens').addHandler(file_handler)
 
+# Add business logic module loggers
+for _module in [
+    'tlh_agent.services.scanner',
+    'tlh_agent.services.portfolio',
+    'tlh_agent.services.rules',
+    'tlh_agent.services.wash_sale',
+    'tlh_agent.services.trade_queue',
+    'tlh_agent.services.rebalance',
+    'tlh_agent.brokers.alpaca',
+]:
+    logging.getLogger(_module).setLevel(logging.DEBUG)
+    logging.getLogger(_module).addHandler(file_handler)
+
 
 @dataclass
 class AssistantState:

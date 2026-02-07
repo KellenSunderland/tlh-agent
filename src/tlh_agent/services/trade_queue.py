@@ -6,11 +6,14 @@ Manages a unified queue of pending trades from multiple sources:
 - Rebalance trades (from rebalance service)
 """
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from enum import Enum
 from uuid import uuid4
+
+logger = logging.getLogger(__name__)
 
 
 class TradeType(Enum):
@@ -123,6 +126,10 @@ class TradeQueueService:
         )
 
         self._queue[trade.id] = trade
+        logger.info(
+            "Added trade: %s %s %s x%.3f shares",
+            trade_type.value, action.value, symbol, shares,
+        )
         return trade
 
     def get_all_trades(self) -> list[QueuedTrade]:
@@ -186,6 +193,7 @@ class TradeQueueService:
         trade = self._queue.get(trade_id)
         if trade and trade.status == TradeStatus.PENDING:
             trade.status = TradeStatus.APPROVED
+            logger.info("Approved trade %s (%s)", trade_id, trade.symbol)
             return True
         return False
 
@@ -201,6 +209,7 @@ class TradeQueueService:
         trade = self._queue.get(trade_id)
         if trade and trade.status == TradeStatus.PENDING:
             trade.status = TradeStatus.REJECTED
+            logger.info("Rejected trade %s (%s)", trade_id, trade.symbol)
             return True
         return False
 
@@ -218,6 +227,7 @@ class TradeQueueService:
             if trade_type is None or trade.trade_type == trade_type:
                 trade.status = TradeStatus.APPROVED
                 count += 1
+        logger.info("Approved all: %d trades", count)
         return count
 
     def reject_all(self, trade_type: TradeType | None = None) -> int:
@@ -255,6 +265,7 @@ class TradeQueueService:
             trade.status = TradeStatus.EXECUTED
             trade.executed_at = datetime.now()
             trade.fill_price = fill_price
+            logger.info("Executed trade %s (%s) at $%.2f", trade_id, trade.symbol, fill_price)
             return True
         return False
 
@@ -273,6 +284,7 @@ class TradeQueueService:
             trade.status = TradeStatus.FAILED
             if error:
                 trade.reason = f"{trade.reason} - Failed: {error}"
+            logger.info("Failed trade %s (%s): %s", trade_id, trade.symbol, error or "unknown")
             return True
         return False
 
@@ -292,7 +304,9 @@ class TradeQueueService:
 
     def clear_queue(self) -> None:
         """Clear all trades from the queue."""
+        count = len(self._queue)
         self._queue.clear()
+        logger.info("Cleared queue: %d trades removed", count)
 
     def get_summary(self) -> dict[str, int]:
         """Get summary counts by status.
@@ -303,6 +317,7 @@ class TradeQueueService:
         summary = {status.value: 0 for status in TradeStatus}
         for trade in self._queue.values():
             summary[trade.status.value] += 1
+        logger.debug("Queue summary: %s", summary)
         return summary
 
     def get_total_notional(self, status: TradeStatus | None = None) -> Decimal:

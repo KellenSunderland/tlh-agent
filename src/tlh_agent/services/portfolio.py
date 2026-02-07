@@ -4,6 +4,7 @@ Wraps the Alpaca client and provides data in a format compatible
 with the UI layer, replacing the mock data factory.
 """
 
+import logging
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -11,6 +12,8 @@ from decimal import Decimal
 from tlh_agent.brokers.alpaca import AlpacaClient, AlpacaOrder, AlpacaPosition
 from tlh_agent.data.local_store import LocalStore
 from tlh_agent.services.wash_sale import WashSaleService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -179,6 +182,11 @@ class PortfolioService:
         pending_harvests = len(self._store.get_pending_harvests())
         active_restrictions = len(self._wash_sale.get_active_restrictions())
 
+        logger.info(
+            "Portfolio summary: total_value=$%.2f, %d positions, net_gain_loss=$%.2f",
+            total_value, len(positions), unrealized_pl,
+        )
+
         return PortfolioSummary(
             total_value=total_value,
             total_cost_basis=total_cost,
@@ -206,6 +214,7 @@ class PortfolioService:
 
         # Sort by market value descending
         positions.sort(key=lambda p: p.market_value, reverse=True)
+        logger.info("get_positions: returning %d positions", len(positions))
         return positions
 
     def get_position(self, ticker: str) -> Position | None:
@@ -256,6 +265,10 @@ class PortfolioService:
 
         # Sort by date descending
         trades.sort(key=lambda t: t.executed_at, reverse=True)
+        logger.debug(
+            "get_trade_history: days=%d, filters=%s, returning %d trades",
+            days, filters, len(trades),
+        )
         return trades
 
     def get_alpaca_positions(self) -> list[AlpacaPosition]:

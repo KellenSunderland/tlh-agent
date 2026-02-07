@@ -1,5 +1,6 @@
 """Alpaca broker client for TLH Agent."""
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -9,6 +10,8 @@ from alpaca.data.requests import StockLatestQuoteRequest
 from alpaca.trading.client import TradingClient
 from alpaca.trading.enums import OrderSide, OrderStatus, QueryOrderStatus, TimeInForce
 from alpaca.trading.requests import GetOrdersRequest, LimitOrderRequest, MarketOrderRequest
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -86,18 +89,20 @@ class AlpacaClient:
     def get_account(self) -> AlpacaAccount:
         """Get account information."""
         account = self._client.get_account()
-        return AlpacaAccount(
+        result = AlpacaAccount(
             id=str(account.id),
             status=account.status.value if account.status else "unknown",
             equity=Decimal(str(account.equity or "0")),
             cash=Decimal(str(account.cash or "0")),
             buying_power=Decimal(str(account.buying_power or "0")),
         )
+        logger.debug("get_account: equity=$%.2f, cash=$%.2f", result.equity, result.cash)
+        return result
 
     def get_positions(self) -> list[AlpacaPosition]:
         """Get all open positions."""
         positions = self._client.get_all_positions()
-        return [
+        result = [
             AlpacaPosition(
                 symbol=p.symbol,
                 qty=Decimal(str(p.qty)),
@@ -110,6 +115,8 @@ class AlpacaClient:
             )
             for p in positions
         ]
+        logger.debug("get_positions: %d positions", len(result))
+        return result
 
     def get_order_history(self, days: int = 365) -> list[AlpacaOrder]:
         """Get order history for the specified number of days.
@@ -126,7 +133,9 @@ class AlpacaClient:
             after=after,
         )
         orders = self._client.get_orders(request)
-        return [self._convert_order(o) for o in orders]
+        result = [self._convert_order(o) for o in orders]
+        logger.debug("get_order_history: days=%d, %d orders", days, len(result))
+        return result
 
     def get_filled_orders(self, days: int = 365) -> list[AlpacaOrder]:
         """Get only filled orders.
@@ -174,6 +183,7 @@ class AlpacaClient:
         Returns:
             The submitted order.
         """
+        logger.info("Submitting market order: %s %s x%.3f", side, symbol, qty)
         order_side = OrderSide.BUY if side == "buy" else OrderSide.SELL
         request = MarketOrderRequest(
             symbol=symbol,
@@ -202,6 +212,7 @@ class AlpacaClient:
         Returns:
             The submitted order.
         """
+        logger.info("Submitting limit order: %s %s x%.3f @ $%.2f", side, symbol, qty, limit_price)
         order_side = OrderSide.BUY if side == "buy" else OrderSide.SELL
         request = LimitOrderRequest(
             symbol=symbol,
@@ -224,8 +235,10 @@ class AlpacaClient:
         """
         try:
             self._client.cancel_order_by_id(order_id)
+            logger.info("Cancelled order %s", order_id)
             return True
         except Exception:
+            logger.warning("Failed to cancel order %s", order_id, exc_info=True)
             return False
 
     def get_quote(self, symbol: str) -> Decimal | None:
@@ -247,6 +260,7 @@ class AlpacaClient:
                 return Decimal(str(price)) if price else None
             return None
         except Exception:
+            logger.warning("Failed to get quote for %s", symbol, exc_info=True)
             return None
 
     def _convert_order(self, order) -> AlpacaOrder:

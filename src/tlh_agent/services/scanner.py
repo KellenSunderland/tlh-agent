@@ -1,5 +1,6 @@
 """Portfolio scanner for tax-loss harvesting opportunities."""
 
+import logging
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -8,6 +9,8 @@ from tlh_agent.data.local_store import HarvestQueueItem, LocalStore
 from tlh_agent.services.portfolio import PortfolioService
 from tlh_agent.services.rules import HarvestEvaluator, HarvestRules
 from tlh_agent.services.wash_sale import WashSaleService
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -119,6 +122,7 @@ class PortfolioScanner:
         for position in positions:
             # Skip positions with gains
             if position.unrealized_pl >= 0:
+                logger.debug("Skipping %s: has gain ($%.2f)", position.symbol, position.unrealized_pl)
                 continue
 
             positions_with_loss += 1
@@ -127,12 +131,14 @@ class PortfolioScanner:
             is_restricted = position.symbol in active_restrictions
             if is_restricted:
                 positions_restricted += 1
+                logger.debug("Skipping %s: wash sale restricted", position.symbol)
                 continue
 
             # Check if qualifies for harvest
             if not self._evaluator.qualifies_for_harvest(
                 position, order_history, is_wash_restricted=False
             ):
+                logger.debug("Skipping %s: doesn't qualify for harvest", position.symbol)
                 continue
 
             # Calculate metrics
@@ -169,6 +175,13 @@ class PortfolioScanner:
 
         # Calculate totals
         total_benefit = sum((o.estimated_tax_benefit for o in opportunities), Decimal("0"))
+
+        logger.info(
+            "Scan complete: %d positions scanned, %d with loss, %d restricted, "
+            "%d qualified, $%.2f total tax benefit",
+            len(positions), positions_with_loss, positions_restricted,
+            len(opportunities), total_benefit,
+        )
 
         return ScanResult(
             opportunities=opportunities,
@@ -237,6 +250,7 @@ class PortfolioScanner:
             if item.id == queue_id:
                 item.status = "approved"
                 self._store.update_harvest_item(item)
+                logger.info("Approved harvest for %s (queue_id=%s)", item.ticker, queue_id)
                 return
         raise ValueError(f"Queue item not found: {queue_id}")
 
@@ -250,6 +264,7 @@ class PortfolioScanner:
             if item.id == queue_id:
                 item.status = "rejected"
                 self._store.update_harvest_item(item)
+                logger.info("Rejected harvest for %s (queue_id=%s)", item.ticker, queue_id)
                 return
         raise ValueError(f"Queue item not found: {queue_id}")
 

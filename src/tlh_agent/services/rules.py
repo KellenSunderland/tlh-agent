@@ -1,10 +1,13 @@
 """Harvest rules configuration and evaluation for TLH Agent."""
 
+import logging
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
 
 from tlh_agent.brokers.alpaca import AlpacaOrder, AlpacaPosition
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -202,18 +205,26 @@ class HarvestEvaluator:
         """
         # Cannot harvest if under wash sale restriction
         if is_wash_restricted:
+            logger.debug("%s: does not qualify - wash sale restricted", position.symbol)
             return False
 
         # Must meet loss thresholds
         if not self.meets_loss_threshold(position):
+            logger.debug("%s: does not qualify - below loss threshold", position.symbol)
             return False
 
         # Must meet tax benefit threshold
         if not self.meets_tax_benefit_threshold(position):
+            logger.debug("%s: does not qualify - below tax benefit threshold", position.symbol)
             return False
 
         # Must meet holding period
-        return self.meets_holding_period(position.symbol, order_history)
+        if not self.meets_holding_period(position.symbol, order_history):
+            logger.debug("%s: does not qualify - holding period not met", position.symbol)
+            return False
+
+        logger.debug("%s: qualifies for harvest", position.symbol)
+        return True
 
     def get_clear_date(self, sale_date: date | None = None) -> date:
         """Get the date when a sold security can be repurchased.
@@ -259,4 +270,8 @@ class HarvestEvaluator:
             elif cumulative_value >= max_harvest_value:
                 break
 
+        logger.debug(
+            "apply_portfolio_limit: %d included, %d excluded (limit=$%.2f)",
+            len(result), len(opportunities) - len(result), max_harvest_value,
+        )
         return result

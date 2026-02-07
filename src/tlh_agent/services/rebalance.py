@@ -4,6 +4,7 @@ Provides rebalancing recommendations that prioritize tax-loss harvesting
 and respect wash sale restrictions.
 """
 
+import logging
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
@@ -12,6 +13,8 @@ from enum import Enum
 from tlh_agent.services.index import IndexService, TargetAllocation
 from tlh_agent.services.portfolio import PortfolioService, Position
 from tlh_agent.services.wash_sale import WashSaleService
+
+logger = logging.getLogger(__name__)
 
 
 class TradeAction(Enum):
@@ -138,6 +141,12 @@ class RebalanceService:
         if max_trades and len(recommendations) > max_trades:
             recommendations = recommendations[:max_trades]
 
+        for rec in recommendations:
+            logger.debug(
+                "Recommendation: %s %s %.3f shares ($%.2f) - %s",
+                rec.action.value, rec.symbol, rec.shares, rec.notional, rec.reason,
+            )
+
         # Calculate totals
         total_buys = sum(r.notional for r in recommendations if r.action == TradeAction.BUY)
         total_sells = sum(r.notional for r in recommendations if r.action == TradeAction.SELL)
@@ -146,6 +155,11 @@ class RebalanceService:
             r.tax_impact for r in recommendations if r.tax_impact and r.tax_impact < 0
         )
         blocked_trades = sum(1 for r in recommendations if r.wash_sale_blocked)
+
+        logger.info(
+            "Rebalance plan: %d recommendations, total_buys=$%.2f, total_sells=$%.2f",
+            len(recommendations), total_buys, total_sells,
+        )
 
         return RebalancePlan(
             recommendations=recommendations,
@@ -301,6 +315,14 @@ class RebalanceService:
 
         # Sort by priority (largest losses first)
         opportunities.sort(key=lambda r: r.priority)
+
+        total_tax_benefit = sum(
+            abs(o.tax_impact) for o in opportunities if o.tax_impact
+        )
+        logger.info(
+            "Harvest opportunities: %d found, total tax benefit=$%.2f",
+            len(opportunities), total_tax_benefit,
+        )
 
         return opportunities
 
