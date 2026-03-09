@@ -131,6 +131,11 @@ class ServiceProvider:
         Args:
             **kwargs: Config fields to update.
         """
+        # Check if alpaca_paper changed before updating
+        alpaca_reconnect = (
+            "alpaca_paper" in kwargs and kwargs["alpaca_paper"] != self.config.alpaca_paper
+        )
+
         # Update config
         for key, value in kwargs.items():
             if hasattr(self.config, key):
@@ -138,6 +143,29 @@ class ServiceProvider:
 
         # Save updated config
         self.config.save()
+
+        # Reconnect Alpaca if paper/live mode changed
+        if alpaca_reconnect:
+            # Reload credentials for the new mode
+            self.config._load_credentials()
+
+        if alpaca_reconnect and self.config.has_alpaca_credentials():
+            try:
+                self.alpaca = AlpacaClient(
+                    api_key=self.config.alpaca_api_key,
+                    secret_key=self.config.alpaca_secret_key,
+                    paper=self.config.alpaca_paper,
+                )
+                self.portfolio = PortfolioService(self.alpaca, self.store, self.wash_sale)
+                self.scanner = PortfolioScanner(
+                    self.portfolio, self.wash_sale, self.store, self.evaluator.rules
+                )
+                self.execution = HarvestExecutionService(self.alpaca, self.store, self.wash_sale)
+            except Exception:
+                self.alpaca = None
+                self.portfolio = None
+                self.scanner = None
+                self.execution = None
 
         # Update rules if relevant fields changed
         rule_fields = {

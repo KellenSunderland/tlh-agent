@@ -72,14 +72,8 @@ class AppConfig:
                 data = json.load(f)
                 config = cls._from_dict(data, config_dir)
 
-        # Load credentials from keychain first
-        keychain_creds = get_alpaca_credentials()
-        if keychain_creds:
-            config.alpaca_api_key, config.alpaca_secret_key = keychain_creds
-        else:
-            # Fall back to environment variables
-            config.alpaca_api_key = os.environ.get("ALPACA_API_KEY", "")
-            config.alpaca_secret_key = os.environ.get("ALPACA_SECRET_KEY", "")
+        # Load credentials for the current trading mode
+        config._load_credentials()
 
         return config
 
@@ -121,6 +115,26 @@ class AppConfig:
 
         with open(self.config_path, "w") as f:
             json.dump(data, f, indent=2)
+
+    def _load_credentials(self) -> None:
+        """Load Alpaca credentials for the current trading mode.
+
+        Tries keychain first (mode-specific, then legacy), then env vars.
+        """
+        keychain_creds = get_alpaca_credentials(paper=self.alpaca_paper)
+        if keychain_creds:
+            self.alpaca_api_key, self.alpaca_secret_key = keychain_creds
+        else:
+            # Fall back to environment variables (mode-specific first, then generic)
+            suffix = "_PAPER" if self.alpaca_paper else "_LIVE"
+            self.alpaca_api_key = os.environ.get(
+                f"ALPACA_API_KEY{suffix}",
+                os.environ.get("ALPACA_API_KEY", ""),
+            )
+            self.alpaca_secret_key = os.environ.get(
+                f"ALPACA_SECRET_KEY{suffix}",
+                os.environ.get("ALPACA_SECRET_KEY", ""),
+            )
 
     def has_alpaca_credentials(self) -> bool:
         """Check if Alpaca credentials are configured."""
