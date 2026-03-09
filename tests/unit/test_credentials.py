@@ -19,16 +19,40 @@ class TestCredentials:
     """Tests for credential storage functions."""
 
     @patch("tlh_agent.credentials.keyring")
-    def test_get_alpaca_credentials_found(self, mock_keyring: MagicMock) -> None:
-        """Test getting credentials when they exist."""
+    def test_get_alpaca_credentials_found_paper(self, mock_keyring: MagicMock) -> None:
+        """Test getting paper credentials when they exist."""
         mock_keyring.get_password.side_effect = lambda svc, key: {
-            ("tlh-agent", "alpaca_api_key"): "test-key",
-            ("tlh-agent", "alpaca_secret_key"): "test-secret",
+            ("tlh-agent", "alpaca_api_key_paper"): "test-key",
+            ("tlh-agent", "alpaca_secret_key_paper"): "test-secret",
         }.get((svc, key))
 
-        result = get_alpaca_credentials()
+        result = get_alpaca_credentials(paper=True)
 
         assert result == ("test-key", "test-secret")
+
+    @patch("tlh_agent.credentials.keyring")
+    def test_get_alpaca_credentials_found_live(self, mock_keyring: MagicMock) -> None:
+        """Test getting live credentials when they exist."""
+        mock_keyring.get_password.side_effect = lambda svc, key: {
+            ("tlh-agent", "alpaca_api_key_live"): "live-key",
+            ("tlh-agent", "alpaca_secret_key_live"): "live-secret",
+        }.get((svc, key))
+
+        result = get_alpaca_credentials(paper=False)
+
+        assert result == ("live-key", "live-secret")
+
+    @patch("tlh_agent.credentials.keyring")
+    def test_get_alpaca_credentials_falls_back_to_legacy(self, mock_keyring: MagicMock) -> None:
+        """Test falling back to legacy unqualified keys."""
+        mock_keyring.get_password.side_effect = lambda svc, key: {
+            ("tlh-agent", "alpaca_api_key"): "legacy-key",
+            ("tlh-agent", "alpaca_secret_key"): "legacy-secret",
+        }.get((svc, key))
+
+        result = get_alpaca_credentials(paper=True)
+
+        assert result == ("legacy-key", "legacy-secret")
 
     @patch("tlh_agent.credentials.keyring")
     def test_get_alpaca_credentials_not_found(self, mock_keyring: MagicMock) -> None:
@@ -43,8 +67,8 @@ class TestCredentials:
     def test_get_alpaca_credentials_partial(self, mock_keyring: MagicMock) -> None:
         """Test getting credentials when only one exists."""
         mock_keyring.get_password.side_effect = lambda svc, key: {
-            ("tlh-agent", "alpaca_api_key"): "test-key",
-            ("tlh-agent", "alpaca_secret_key"): None,
+            ("tlh-agent", "alpaca_api_key_paper"): "test-key",
+            ("tlh-agent", "alpaca_secret_key_paper"): None,
         }.get((svc, key))
 
         result = get_alpaca_credentials()
@@ -52,22 +76,35 @@ class TestCredentials:
         assert result is None
 
     @patch("tlh_agent.credentials.keyring")
-    def test_set_alpaca_credentials(self, mock_keyring: MagicMock) -> None:
-        """Test setting credentials."""
-        set_alpaca_credentials("my-key", "my-secret")
+    def test_set_alpaca_credentials_paper(self, mock_keyring: MagicMock) -> None:
+        """Test setting paper credentials."""
+        set_alpaca_credentials("my-key", "my-secret", paper=True)
 
         assert mock_keyring.set_password.call_count == 2
-        mock_keyring.set_password.assert_any_call(SERVICE_NAME, "alpaca_api_key", "my-key")
-        mock_keyring.set_password.assert_any_call(SERVICE_NAME, "alpaca_secret_key", "my-secret")
+        mock_keyring.set_password.assert_any_call(SERVICE_NAME, "alpaca_api_key_paper", "my-key")
+        mock_keyring.set_password.assert_any_call(
+            SERVICE_NAME, "alpaca_secret_key_paper", "my-secret"
+        )
+
+    @patch("tlh_agent.credentials.keyring")
+    def test_set_alpaca_credentials_live(self, mock_keyring: MagicMock) -> None:
+        """Test setting live credentials."""
+        set_alpaca_credentials("live-key", "live-secret", paper=False)
+
+        assert mock_keyring.set_password.call_count == 2
+        mock_keyring.set_password.assert_any_call(SERVICE_NAME, "alpaca_api_key_live", "live-key")
+        mock_keyring.set_password.assert_any_call(
+            SERVICE_NAME, "alpaca_secret_key_live", "live-secret"
+        )
 
     @patch("tlh_agent.credentials.keyring")
     def test_delete_alpaca_credentials(self, mock_keyring: MagicMock) -> None:
         """Test deleting credentials."""
-        delete_alpaca_credentials()
+        delete_alpaca_credentials(paper=True)
 
         assert mock_keyring.delete_password.call_count == 2
-        mock_keyring.delete_password.assert_any_call(SERVICE_NAME, "alpaca_api_key")
-        mock_keyring.delete_password.assert_any_call(SERVICE_NAME, "alpaca_secret_key")
+        mock_keyring.delete_password.assert_any_call(SERVICE_NAME, "alpaca_api_key_paper")
+        mock_keyring.delete_password.assert_any_call(SERVICE_NAME, "alpaca_secret_key_paper")
 
     @patch("tlh_agent.credentials.keyring")
     def test_delete_alpaca_credentials_not_found(self, mock_keyring: MagicMock) -> None:
@@ -90,11 +127,11 @@ class TestCredentials:
     def test_has_alpaca_credentials_true(self, mock_keyring: MagicMock) -> None:
         """Test has_alpaca_credentials when credentials exist."""
         mock_keyring.get_password.side_effect = lambda svc, key: {
-            ("tlh-agent", "alpaca_api_key"): "test-key",
-            ("tlh-agent", "alpaca_secret_key"): "test-secret",
+            ("tlh-agent", "alpaca_api_key_paper"): "test-key",
+            ("tlh-agent", "alpaca_secret_key_paper"): "test-secret",
         }.get((svc, key))
 
-        assert has_alpaca_credentials() is True
+        assert has_alpaca_credentials(paper=True) is True
 
     @patch("tlh_agent.credentials.keyring")
     def test_has_alpaca_credentials_false(self, mock_keyring: MagicMock) -> None:
